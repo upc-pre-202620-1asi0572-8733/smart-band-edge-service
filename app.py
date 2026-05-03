@@ -1,4 +1,16 @@
-"""Flask application entry point for the Smart Band Edge Service."""
+"""Flask application entry point for the Smart Band Edge Service.
+
+This module wires together the Flask application, registers the IAM and
+Health bounded-context Blueprints, and ensures the SQLite database is
+initialised (tables created, test device seeded) exactly once before the
+first HTTP request is handled.
+
+Typical usage::
+
+    flask --app app run
+    # or
+    python app.py
+"""
 
 from flask import Flask
 
@@ -15,7 +27,19 @@ first_request = True
 
 @app.before_request
 def setup():
-    """Initialize the database and create a test device before the first request."""
+    """Initialise the database and seed a test device on the very first request.
+
+    Uses a module-level flag (``first_request``) to ensure this one-time setup
+    runs only once for the lifetime of the process.  Subsequent requests bypass
+    this function entirely.
+
+    Side effects:
+        - Creates the SQLite database file (``smart_band.db``) if absent.
+        - Creates ``devices`` and ``health_records`` tables when they do not
+          exist yet (``safe=True``).
+        - Inserts the default test device (``smart-band-001``) if it has not
+          been created previously.
+    """
     global first_request
     if first_request:
         first_request = False
