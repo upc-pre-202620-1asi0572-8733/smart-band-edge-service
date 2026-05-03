@@ -2,7 +2,7 @@
 
 This module wires together the Flask application, registers the IAM and
 Health bounded-context Blueprints, and ensures the SQLite database is
-initialised (tables created, test device seeded) exactly once before the
+initialized (tables created, test device seeded) exactly once before the
 first HTTP request is handled.
 
 Typical usage::
@@ -27,7 +27,7 @@ first_request = True
 
 @app.before_request
 def setup():
-    """Initialise the database and seed a test device on the very first request.
+    """Initialize the database and seed a test device on the very first request.
 
     Uses a module-level flag (``first_request``) to ensure this one-time setup
     runs only once for the lifetime of the process.  Subsequent requests bypass

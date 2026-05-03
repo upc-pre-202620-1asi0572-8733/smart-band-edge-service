@@ -43,7 +43,7 @@ class HealthRecordService:
 
         Returns:
             HealthRecord: A new, unsaved :class:`HealthRecord` domain entity
-            with a UTC-normalised ``created_at`` value.
+            with a UTC-normalized ``created_at`` value.
 
         Raises:
             ValueError: If ``bpm`` is not convertible to ``float``, falls

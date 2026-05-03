@@ -1,6 +1,6 @@
 """Domain services for the IAM bounded context.
 
-Domain services express business behaviour that does not fit neatly inside a
+Domain services express business behavior that does not fit neatly inside a
 single entity.  ``AuthService`` encapsulates the authentication invariant for
 the IAM bounded context: a device is considered authenticated when it exists
 in the repository (i.e. it was found by matching both ``device_id`` and
@@ -16,7 +16,7 @@ class AuthService:
 
     The authentication rule is deliberately kept simple: a ``Device`` object
     that was successfully retrieved from the repository is, by definition,
-    authenticated.  Absent or unrecognised credentials result in ``None``
+    authenticated.  Absent or unrecognized credentials result in ``None``
     being passed to this service, which returns ``False``.
     """
 
