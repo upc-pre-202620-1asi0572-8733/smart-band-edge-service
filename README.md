@@ -1,62 +1,246 @@
+# Smart Band Edge Service
 
-# Smart Band Edge Service (smart_band_edge_service)
+`smart_band_edge_service` is a lightweight IoT edge API for ingesting heart-rate
+data emitted by smart band devices. The service follows a Domain-Driven Design
+(DDD) approach and separates the device-authentication concerns from the health
+data ingestion concerns.
 
-## Overview
+At its current stage, the service provides:
 
-Smart Band Edge Service is a Python-based application for processing and analyzing data from smart wearable devices at the edge. It provides real-time data collection, device authentication, and RESTful APIs for health monitoring and activity tracking.
+- device authentication using `device_id` + `X-API-Key`
+- ingestion of heart-rate (`bpm`) measurements
+- SQLite persistence through Peewee ORM
+- a layered architecture aligned with DDD bounded contexts
 
-## Features
+## Current Scope
 
-- Real-time data ingestion from smart bands
-- Device authentication and management
-- RESTful API for data access and control
-- Edge processing and analytics
-- Configurable data storage (SQLite)
-- Easy integration with cloud or local systems
+This repository currently implements a focused subset of an IoT edge solution:
 
-## Dependencies
+- **Implemented**
+  - registration/lookup of a development test device
+  - authentication of device-originated requests
+  - creation and persistence of health records
+  - timestamp normalization to UTC
+- **Not implemented yet**
+  - activity tracking
+  - sleep tracking
+  - analytics pipelines
+  - cloud synchronization
+  - a dedicated health-check endpoint such as `GET /status`
 
-- Python 3.13 or higher
-- Flask (web framework)
-- Peewee (ORM for SQLite)
-- python-dateutil (date and time handling)
+Keeping the README aligned with the implemented scope is especially important
+in IoT projects, where device contracts and API behavior must remain explicit
+and dependable.
 
-## Domain-Driven Design (DDD) Structure
+## Why DDD for an IoT Edge Service?
 
-The project follows a Domain-Driven Design (DDD) approach, distributing the features in two main bounded contexts:
-- **Health Monitoring**: Manages health-related data from smart bands, including heart rate, steps, and sleep patterns.
-- **Identity and Access Management**: Handles device authentication.
+In IoT systems, devices, telemetry, authentication, and persistence often grow
+quickly and evolve independently. DDD helps keep that complexity manageable by
+organizing the code around business capabilities instead of technical concerns.
 
-Inside each bounded context, code is organized into distinct layers:
-- **Domain**: Contains core business logic and domain models.
-- **Application**: Contains application services and use cases.
-- **Infrastructure**: Contains data access, external service integrations, and configurations.
-- **Interfaces**: Contains API controllers and user interfaces.
+This service is split into two bounded contexts:
 
-## Documentation
+### 1. IAM (Identity and Access Management)
 
-For detailed documentation, refer to the [docs](docs) directory. It includes:
-- **Class Diagrams**: The file [docs/class-diagram.puml](docs/class-diagram.puml) contains the visual representation of the domain-driven packages, classes, and their relationships in PlantUML DSL.
+Responsible for identifying devices and validating their credentials.
 
-## Usage
+- **Core concept**: `Device`
+- **Primary responsibility**: authenticate incoming requests from smart bands
 
-### Start the Service
+### 2. Health
+
+Responsible for validating and storing health telemetry.
+
+- **Core concept**: `HealthRecord`
+- **Primary responsibility**: accept heart-rate readings and persist them
+
+The Health context depends on IAM only for device validation, which keeps the
+telemetry model decoupled from authentication details.
+
+## Layered Architecture
+
+Each bounded context follows the same DDD-inspired structure:
+
+- **Domain**
+  - entities and domain services
+  - business rules and invariants
+  - no framework or ORM concerns
+- **Application**
+  - orchestration of use cases
+  - coordinates repositories and domain services
+- **Infrastructure**
+  - Peewee models
+  - repository implementations
+  - persistence details
+- **Interfaces**
+  - Flask HTTP endpoints and request handling
+
+### Project Structure
+
+```text
+smart_band_edge_service/
+├── app.py
+├── health/
+│   ├── domain/
+│   ├── application/
+│   ├── infrastructure/
+│   └── interfaces/
+├── iam/
+│   ├── domain/
+│   ├── application/
+│   ├── infrastructure/
+│   └── interfaces/
+├── shared/
+│   └── infrastructure/
+└── docs/
+```
+
+## Technology Stack
+
+- Python 3.13+
+- Flask
+- Peewee
+- SQLite
+- python-dateutil
+
+Exact Python dependencies are declared in [`requirements.txt`](requirements.txt).
+
+## Getting Started
+
+### 1. Create a virtual environment
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 2. Install dependencies
+
+```sh
+pip install -r requirements.txt
+```
+
+### 3. Run the service
 
 ```sh
 python app.py
 ```
 
-The service will initialize the database and create a test device on the first run.
+The Flask application runs in debug mode when started this way.
 
-### API Endpoints
+## Runtime Behavior
 
-- `GET /status` — Service health check (_to be implemented_)
-- `POST /api/v1/health-monitoring/health-records` — Ingest smart band data
+The application performs bootstrap work before serving the first request:
 
+- initializes the SQLite database
+- creates the `devices` and `health_records` tables if they do not exist
+- seeds a development test device if absent
 
-Refer to the code-level documentation for full details.
+Database initialization is triggered by the Flask `before_request` hook, so the
+setup occurs on the first incoming HTTP request handled by the process.
+
+## Development Test Device
+
+For local development, the application seeds the following device if it is not
+already present in the database:
+
+- `device_id`: `smart-band-001`
+- `api_key`: `test-api-key-123`
+
+> [!WARNING]
+> These credentials are hard-coded for local development only. Do not reuse
+> them in production or on real IoT deployments.
+
+## API Contract
+
+### Create health record
+
+`POST /api/v1/health-monitoring/data-records`
+
+Creates a new heart-rate record for an authenticated device.
+
+#### Required headers
+
+- `Content-Type: application/json`
+- `X-API-Key: <device api key>`
+
+#### Request body
+
+```json
+{
+  "device_id": "smart-band-001",
+  "bpm": 72.5,
+  "created_at": "2025-06-04T18:23:00-05:00"
+}
+```
+
+#### Request fields
+
+- `device_id` (`string`, required): unique device identifier
+- `bpm` (`number`, required): heart rate in beats per minute
+- `created_at` (`string`, optional): ISO 8601 timestamp; when omitted, the
+  service uses the current UTC time
+
+#### Example request
+
+```sh
+curl -X POST http://127.0.0.1:5000/api/v1/health-monitoring/data-records \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: test-api-key-123' \
+  -d '{
+	"device_id": "smart-band-001",
+	"bpm": 72.5,
+	"created_at": "2025-06-04T18:23:00-05:00"
+  }'
+```
+
+#### Success response
+
+`201 Created`
+
+```json
+{
+  "id": 1,
+  "device_id": "smart-band-001",
+  "bpm": 72.5,
+  "created_at": "2025-06-04T23:23:00+00:00Z"
+}
+```
+
+#### Error responses
+
+- `400 Bad Request`
+  - missing required fields
+  - invalid BPM value
+  - malformed timestamp
+- `401 Unauthorized`
+  - missing `device_id`
+  - missing `X-API-Key`
+  - invalid device/API key pair
+
+## Operational Notes for IoT Projects
+
+When adapting this service for a real IoT solution, consider the following:
+
+- **Credential management**: replace hard-coded development credentials with a
+  secure enrollment or provisioning flow.
+- **Persistence**: SQLite is suitable for local development and lightweight
+  edge deployments, but not ideal for high write concurrency.
+- **Observability**: add structured logging, trace correlation, and a proper
+  health-check endpoint before production use.
+- **Device contracts**: version telemetry payloads carefully so device firmware
+  and server-side ingestion remain compatible.
+- **Startup lifecycle**: move bootstrap logic out of `before_request` if you
+  need deterministic initialization during container startup.
+
+## Documentation
+
+Additional documentation is available in [`docs/`](docs):
+
+- [`docs/class-diagram.puml`](docs/class-diagram.puml): PlantUML diagram of
+  the bounded contexts, layers, and relationships.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-
+This project is licensed under the MIT License. See [`LICENSE.md`](LICENSE.md)
+for details.
