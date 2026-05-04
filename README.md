@@ -14,7 +14,7 @@ At its current stage, the service provides:
 
 ## Current Scope
 
-This repository currently implements a focused subset of an IoT edge solution:
+This repository currently implements a focused subset of an IoT-edge solution:
 
 - **Implemented**
   - registration/lookup of a development test device
@@ -26,7 +26,7 @@ This repository currently implements a focused subset of an IoT edge solution:
   - sleep tracking
   - analytics pipelines
   - cloud synchronization
-  - a dedicated health-check endpoint such as `GET /status`
+  - a dedicated health check endpoint such as `GET /status`
 
 Keeping the README aligned with the implemented scope is especially important
 in IoT projects, where device contracts and API behavior must remain explicit
@@ -95,6 +95,28 @@ smart_band_edge_service/
 └── docs/
 ```
 
+## Technical Stories
+
+Technical stories are part of the official project documentation and describe
+the integration contract from the smart-band device maker perspective for
+unattended device-to-edge interactions.
+
+- Source of truth: [`docs/user-stories.md`](docs/user-stories.md)
+- Story style: `As a ... I want to ... so that ...` with Gherkin acceptance
+  criteria (`Given/When/Then`)
+- Focus: observable edge-service behavior (authentication, validation,
+  persistence, bootstrap), not UI behavior
+
+### Story-to-Context Mapping
+
+- **Health bounded context**: `TS-SBE-001`, `TS-SBE-003`, `TS-SBE-004`,
+  `TS-SBE-005`
+- **IAM bounded context**: `TS-SBE-002`
+- **Application bootstrap / shared infrastructure**: `TS-SBE-006`
+
+Use these stories to drive API evolution, regression validation, and backlog
+prioritization as the IoT edge capabilities grow.
+
 ## Technology Stack
 
 - Python 3.13+
@@ -153,7 +175,7 @@ already present in the database:
 
 ## API Contract
 
-### Create health record
+### Create a health record
 
 `POST /api/v1/health-monitoring/data-records`
 
@@ -225,9 +247,9 @@ When adapting this service for a real IoT solution, consider the following:
 - **Credential management**: replace hard-coded development credentials with a
   secure enrollment or provisioning flow.
 - **Persistence**: SQLite is suitable for local development and lightweight
-  edge deployments, but not ideal for high write concurrency.
+  edge deployments, but not ideal for high-write concurrency.
 - **Observability**: add structured logging, trace correlation, and a proper
-  health-check endpoint before production use.
+  health check endpoint before production use.
 - **Device contracts**: version telemetry payloads carefully so device firmware
   and server-side ingestion remain compatible.
 - **Startup lifecycle**: move bootstrap logic out of `before_request` if you
@@ -237,6 +259,8 @@ When adapting this service for a real IoT solution, consider the following:
 
 Additional documentation is available in [`docs/`](docs):
 
+- [`docs/user-stories.md`](docs/user-stories.md): technical stories and
+  acceptance criteria for unattended smart-band to edge-service interactions.
 - [`docs/class-diagram.puml`](docs/class-diagram.puml): PlantUML diagram of
   the bounded contexts, layers, and relationships.
 
