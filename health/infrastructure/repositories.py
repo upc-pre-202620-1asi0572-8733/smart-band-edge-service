@@ -7,7 +7,7 @@ Provides the persistence adapter that maps between the
 Following the Repository pattern, callers in the application layer interact
 only with domain entities and are shielded from ORM/database details.
 """
-from health.domain.entities import HealthRecord
+from health.domain.entities import HealthRecord, SubmittingDevice
 from health.infrastructure.models import HealthRecord as HealthRecordModel
 
 
@@ -41,10 +41,8 @@ class HealthRecordRepository:
             bpm=health_record.bpm,
             created_at=health_record.created_at,
         )
-        return HealthRecord(
-            record.device_id,
+        return HealthRecord.record(
+            SubmittingDevice(record.device_id),
             record.bpm,
             record.created_at,
-            record.id,
-        )
-
+        ).with_persistence_id(record.id)

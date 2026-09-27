@@ -18,6 +18,8 @@ instead of being listed individually.
 
 ### Changed
 
+- Health records now enforce BPM, device identity, and UTC timestamp invariants
+  through domain value objects and a domain-owned record factory.
 - Health now uses a DDD anti-corruption layer to translate IAM authentication
   into its own `SubmittingDevice` concept, removing direct repository and
   HTTP-helper dependencies across the bounded-context boundary.

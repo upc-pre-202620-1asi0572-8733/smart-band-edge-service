@@ -8,6 +8,7 @@ status code selection.
 """
 from flask import Blueprint, current_app, jsonify, request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from datetime import datetime
 
 from health.application.errors import DeviceAuthenticationFailed
 
@@ -21,7 +22,7 @@ class HealthRecordCreateRequest(BaseModel):
 
     device_id: str = Field(..., description="Identifier of the submitting device.")
     bpm: float = Field(..., ge=0, le=200, description="Heart-rate reading in beats per minute.")
-    created_at: str | None = Field(None, description="ISO 8601 timestamp.")
+    created_at: datetime | None = Field(None, description="ISO 8601 timestamp.")
 
 
 @health_api.route("/api/v1/health-monitoring/data-records", methods=["POST"])

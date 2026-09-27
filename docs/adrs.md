@@ -276,3 +276,38 @@ semantics and does not invoke IAM routes or helpers.
 - Calling IAM's HTTP endpoint, adding avoidable network and serialization
   overhead for an in-process modular monolith.
 - Duplicating credential validation in Health.
+
+## ADR-0009: Protect Health record invariants with domain value objects
+
+- **Status**: Accepted
+- **Date**: 2026-09-27
+
+### Context
+
+Health telemetry validation was concentrated in a service that accepted raw
+transport-like values, while callers could directly construct a record with
+invalid BPM or a naive timestamp.
+
+### Decision
+
+Represent BPM and observation time as immutable `HeartRateBpm` and `RecordedAt`
+value objects. Create records through the `HealthRecord.record` domain factory,
+which requires the Health-local `SubmittingDevice`, validates BPM, and applies
+UTC timestamp rules. Parse timestamp strings at the HTTP boundary and pass
+typed datetimes into the application layer.
+
+### Consequences
+
+- Invalid values cannot enter a HealthRecord through normal domain
+  construction.
+- Domain invariants can be tested without Flask, Pydantic, or a database.
+- Persistence and HTTP layers map to/from the domain-owned value objects.
+- The current plausible BPM range is explicit in the domain model and needs
+  domain review if supported sensors or use cases change.
+
+### Alternatives considered
+
+- Keeping invariant checks in an application/domain service and allowing
+  direct record construction.
+- Relying only on request schema validation, which would not protect other
+  record creation paths.

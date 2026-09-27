@@ -5,10 +5,12 @@ They orchestrate use-cases by coordinating domain services, domain entities,
 and repositories without containing domain logic themselves.
 """
 
-from health.domain.entities import HealthRecord
-from health.domain.services import HealthRecordService, HealthRecordRepository
-from health.infrastructure.repositories import HealthRecordRepository as HealthRecordRepositoryImpl
+from datetime import datetime
+
 from health.application.errors import DeviceAuthenticationFailed
+from health.domain.entities import HealthRecord, SubmittingDevice
+from health.domain.repositories import HealthRecordRepository
+from health.infrastructure.repositories import HealthRecordRepository as HealthRecordRepositoryImpl
 from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 
 
@@ -19,9 +21,8 @@ class HealthRecordApplicationService:
 
     1. Cross-context validation – delegates IAM translation to the Health
        :class:`~health.integration.iam_anti_corruption_layer.IamAntiCorruptionLayer`.
-    2. Domain logic – delegates to: class:`~health.domain.services.HealthRecordService` to validate
-        the raw sensor values and construct a: class:`~health.domain.entities.HealthRecord`
-       entity.
+    2. Domain logic – creates a valid :class:`~health.domain.entities.HealthRecord`
+       through its domain factory.
     3. Persistence – delegates to: class:`~health.infrastructure.repositories.HealthRecordRepository` to
        persist the entity and return the saved aggregate with its assigned
        identity.
@@ -31,14 +32,14 @@ class HealthRecordApplicationService:
         self,
         iam_anti_corruption_layer: IamAntiCorruptionLayer,
         health_record_repository: HealthRecordRepository | None = None,
-        health_record_service: HealthRecordService | None = None,
     ):
         """Initialize the service with its required collaborators."""
         self.health_record_repository = health_record_repository or HealthRecordRepositoryImpl()
-        self.health_record_service = health_record_service or HealthRecordService()
         self.iam_anti_corruption_layer = iam_anti_corruption_layer
 
-    def create_health_record(self, device_id: str, bpm: float, created_at: str, api_key: str) -> HealthRecord:
+    def create_health_record(
+        self, device_id: str, bpm: float, created_at: datetime | None, api_key: str
+    ) -> HealthRecord:
         """Execute the *create health record* use-case.
 
         Validates that the device identified by ``device_id`` is registered
@@ -49,8 +50,8 @@ class HealthRecordApplicationService:
         Args:
             device_id (str): Identifier of the device submitting the reading.
             bpm (float): Heart-rate measurement in beats per minute.
-            created_at (str): ISO 8601 timestamp of the reading.  Passed
-                directly to the domain service, which also accepts ``None``
+            created_at (datetime | None): Parsed timestamp of the reading. The
+                domain record normalizes it to UTC and accepts ``None``
                 to default to the current UTC time.
             api_key (str): The value of the ``X-API-Key`` request header used
                 to authenticate the device.
@@ -60,16 +61,15 @@ class HealthRecordApplicationService:
             entity populated with its assigned ``id``.
 
         Raises:
-            ValueError: If no device matches the given ``device_id`` /
-                ``api_key`` combination, or if the domain service rejects the
-                sensor values (invalid BPM or malformed timestamp).
+            DeviceAuthenticationFailed: If the credentials are not accepted.
+            ValueError: If the domain rejects the sensor values.
         """
         submitting_device = self.iam_anti_corruption_layer.authenticated_submitting_device(
             device_id, api_key
         )
         if submitting_device is None:
             raise DeviceAuthenticationFailed
-        record = self.health_record_service.create_record(
-            submitting_device.device_id, bpm, created_at
+        record = HealthRecord.record(
+            SubmittingDevice(submitting_device.device_id), bpm, created_at
         )
         return self.health_record_repository.save(record)
