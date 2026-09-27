@@ -5,10 +5,9 @@ a single entity.  ``HealthRecordService`` is responsible for validating raw
 sensor input and constructing a well-formed :class:`~health.domain.entities.HealthRecord`
 aggregate, enforcing the invariants of the Health bounded context.
 """
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+from math import isfinite
 from typing import Protocol
-
-from dateutil.parser import parse
 
 from health.domain.entities import HealthRecord
 
@@ -61,10 +60,13 @@ class HealthRecordService:
         """
         try:
             bpm = float(bpm)
-            if not (0 <= bpm <= 200):
+            if not isfinite(bpm) or not (0 <= bpm <= 200):
                 raise ValueError("Invalid BPM value")
             if created_at:
-                parsed_created_at = parse(created_at).astimezone(UTC)
+                parsed_created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                if parsed_created_at.tzinfo is None:
+                    raise ValueError("Timestamp must include a timezone")
+                parsed_created_at = parsed_created_at.astimezone(UTC)
             else:
                 parsed_created_at = datetime.now(UTC)
         except (ValueError, TypeError):

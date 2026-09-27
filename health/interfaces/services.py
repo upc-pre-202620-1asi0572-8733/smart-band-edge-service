@@ -6,8 +6,8 @@ JSON responses.  This layer owns no domain logic; it is responsible solely
 for I/O concerns: parsing request data, authentication delegation, and HTTP
 status code selection.
 """
-from flask import Blueprint, request, jsonify
-from pydantic import BaseModel, Field, ValidationError
+from flask import Blueprint, jsonify, request
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from health.application.services import HealthRecordApplicationService
 from iam.interfaces.services import authenticate_request
@@ -17,6 +17,8 @@ health_api = Blueprint("health_api", __name__)
 
 class HealthRecordCreateRequest(BaseModel):
     """Pydantic model for validating the create health record request body."""
+
+    model_config = ConfigDict(extra="forbid")
 
     device_id: str = Field(..., description="Identifier of the submitting device.")
     bpm: float = Field(..., ge=0, le=200, description="Heart-rate reading in beats per minute.")
@@ -74,7 +76,12 @@ def create_health_record():
         return auth_result
 
     try:
-        req_data = HealthRecordCreateRequest.model_validate(request.json)
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 415
+        request_data = request.get_json(silent=True)
+        if request_data is None:
+            return jsonify({"error": "Invalid JSON request body"}), 400
+        req_data = HealthRecordCreateRequest.model_validate(request_data)
         record = health_record_service.create_health_record(
             req_data.device_id, req_data.bpm, req_data.created_at, request.headers.get("X-API-Key")
         )
@@ -84,6 +91,7 @@ def create_health_record():
             "bpm": record.bpm,
             "created_at": record.created_at.isoformat() + "Z"
         }), 201
-    except (ValidationError, ValueError) as e:
-        return jsonify({"error": str(e)}), 400
-
+    except ValidationError:
+        return jsonify({"error": "Invalid health record request"}), 400
+    except ValueError:
+        return jsonify({"error": "Invalid health record data"}), 400

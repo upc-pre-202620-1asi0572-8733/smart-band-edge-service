@@ -6,8 +6,8 @@ endpoints.  This layer owns no domain or business logic; it is concerned
 solely with HTTP request/response handling and delegating to the application
 service.
 """
-from flask import Blueprint, request, jsonify
-from pydantic import BaseModel, Field
+from flask import Blueprint, jsonify, request
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from iam.application.services import AuthApplicationService
 
@@ -17,6 +17,8 @@ iam_api = Blueprint("iam_api", __name__)
 class AuthRequest(BaseModel):
     """Pydantic model for validating the authentication request data."""
 
+    model_config = ConfigDict(extra="forbid")
+
     device_id: str | None = Field(None, description="Identifier of the device.")
 
 
@@ -24,7 +26,7 @@ class AuthRequest(BaseModel):
 auth_service = AuthApplicationService()
 
 
-def authenticate_request():
+def authenticate_request() -> tuple | None:
     """Validate the device identity for an incoming HTTP request.
 
     Extracts ``device_id`` from the JSON request body and ``X-API-Key`` from
@@ -53,15 +55,17 @@ def authenticate_request():
     if not api_key:
         return jsonify({"error": "Missing X-API-Key"}), 401
 
-    try:
-        # We use a partial model or safe check since request.json might be missing
-        if not request.json:
-            return jsonify({"error": "Missing request body"}), 401
+    if not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
 
-        auth_data = AuthRequest.model_validate(request.json)
-        device_id = auth_data.device_id
-    except Exception:
-        return jsonify({"error": "Invalid request body"}), 401
+    request_data = request.get_json(silent=True)
+    if request_data is None:
+        return jsonify({"error": "Invalid JSON request body"}), 400
+
+    try:
+        device_id = AuthRequest.model_validate(request_data).device_id
+    except ValidationError:
+        return jsonify({"error": "Invalid request body"}), 400
 
     if not device_id:
         return jsonify({"error": "Missing device_id"}), 401
@@ -69,4 +73,3 @@ def authenticate_request():
     if not auth_service.authenticate(device_id, api_key):
         return jsonify({"error": "Invalid device_id or API key"}), 401
     return None
-
