@@ -12,40 +12,39 @@ Typical usage::
     python app.py
 """
 
+import os
+
 from flask import Flask
 
 import iam.application.services
 from health.interfaces.services import health_api
 from iam.interfaces.services import iam_api
-from shared.infrastructure.database import init_db
+from shared.infrastructure.database import configure_database, db, init_db
 
-app = Flask(__name__)
-app.register_blueprint(iam_api)
-app.register_blueprint(health_api)
 
-first_request = True
+def create_app() -> Flask:
+    """Create and initialize the Flask application."""
+    app = Flask(__name__)
+    configure_database(os.getenv("DATABASE_PATH", "smart_band.db"))
+    init_db()
+    app.config["SEED_TEST_DEVICE"] = os.getenv("SEED_TEST_DEVICE", "1") == "1"
 
-@app.before_request
-def setup():
-    """Initialize the database and seed a test device on the very first request.
+    app.register_blueprint(iam_api)
+    app.register_blueprint(health_api)
 
-    Uses a module-level flag (``first_request``) to ensure this one-time setup
-    runs only once for the lifetime of the process.  Subsequent requests bypass
-    this function entirely.
-
-    Side effects:
-        - Creates the SQLite database file (``smart_band.db``) if absent.
-        - Creates ``devices`` and ``health_records`` tables when they do not
-          exist yet (``safe=True``).
-        - Inserts the default test device (``smart-band-001``) if it has not
-          been created previously.
-    """
-    global first_request
-    if first_request:
-        first_request = False
-        init_db()
+    if app.config["SEED_TEST_DEVICE"]:
         auth_application_service = iam.application.services.AuthApplicationService()
         auth_application_service.get_or_create_test_device()
+
+    @app.teardown_appcontext
+    def close_database(_exception: BaseException | None) -> None:
+        if not db.is_closed():
+            db.close()
+
+    return app
+
+
+app = create_app()
 
 if __name__ == "__main__":
     app.run(debug=True)

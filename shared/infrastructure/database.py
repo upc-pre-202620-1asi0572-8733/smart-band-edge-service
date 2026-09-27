@@ -13,10 +13,17 @@ Note:
     called.  Peewee's ``SqliteDatabase`` manages the connection lifecycle
     via its own thread-local storage.
 """
+from pathlib import Path
+
 from peewee import SqliteDatabase
 
 # Shared SQLite database instance used by all bounded-context ORM models.
-db = SqliteDatabase('smart_band.db')
+db = SqliteDatabase(None)
+
+
+def configure_database(database_path: str) -> None:
+    """Configure the shared database before the application is created."""
+    db.init(str(Path(database_path)))
 
 
 def init_db() -> None:
@@ -37,9 +44,8 @@ def init_db() -> None:
         - Creates the ``health_records`` table if absent.
         - Closes the connection after table creation.
     """
-    db.connect()
+    if db.is_closed():
+        db.connect()
     from iam.infrastructure.models import Device
     from health.infrastructure.models import HealthRecord
     db.create_tables([Device, HealthRecord], safe=True)
-    db.close()
-
