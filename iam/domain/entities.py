@@ -4,9 +4,11 @@ This module defines the aggregate root for the IAM bounded context.
 Entities carry identity across their lifetime and encapsulate state that
 is only modified by domain services enforcing business invariants.
 """
+from dataclasses import dataclass
 from datetime import datetime
 
 
+@dataclass(frozen=True)
 class Device:
     """Aggregate root representing a registered smart band device.
 
@@ -25,15 +27,7 @@ class Device:
             first registered in the system.
     """
 
-    def __init__(self, device_id: str, api_key: str, created_at: datetime):
-        """Initialise a Device aggregate root.
-
-        Args:
-            device_id (str): Unique identifier for the device.
-            api_key (str): Secret API key used for request authentication.
-            created_at (datetime): UTC timestamp of device registration.
-        """
-        self.device_id = device_id
-        self.api_key = api_key
-        self.created_at = created_at
+    device_id: str
+    api_key: str
+    created_at: datetime
 

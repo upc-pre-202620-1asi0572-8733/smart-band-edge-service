@@ -6,9 +6,21 @@ the IAM bounded context: a device is considered authenticated when it exists
 in the repository (i.e. it was found by matching both ``device_id`` and
 ``api_key``).
 """
-from typing import Optional
+from typing import Protocol
 
 from iam.domain.entities import Device
+
+
+class DeviceRepository(Protocol):
+    """Protocol for device persistence."""
+
+    def find_by_id_and_api_key(self, device_id: str, api_key: str) -> Device | None:
+        """Look up a device by its identifier and API key."""
+        ...
+
+    def get_or_create_test_device(self) -> Device:
+        """Retrieve the default test device, creating it if absent."""
+        ...
 
 
 class AuthService:
@@ -21,7 +33,7 @@ class AuthService:
     """
 
     @staticmethod
-    def authenticate(device: Optional[Device]) -> bool:
+    def authenticate(device: Device | None) -> bool:
         """Determine whether the given device is authenticated.
 
         The :class:`~iam.infrastructure.repositories.DeviceRepository` returns
@@ -29,7 +41,7 @@ class AuthService:
         value indicates that the ``device_id`` / ``api_key`` pair is valid.
 
         Args:
-            device (Optional[Device]): The device entity returned by the
+            device (Device | None): The device entity returned by the
                 repository look-up, or ``None`` if no matching device was found.
 
         Returns:
