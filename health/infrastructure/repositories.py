@@ -20,8 +20,7 @@ class HealthRecordRepository:
     infrastructure concerns.
     """
 
-    @staticmethod
-    def save(health_record: HealthRecord) -> HealthRecord:
+    def save(self, health_record: HealthRecord) -> HealthRecord:
         """Persist a transient :class:`~health.domain.entities.HealthRecord` entity.
 
         Inserts a new row into the ``health_records`` table using Peewee's
@@ -43,9 +42,9 @@ class HealthRecordRepository:
             created_at=health_record.created_at,
         )
         return HealthRecord(
-            health_record.device_id,
-            health_record.bpm,
-            health_record.created_at,
+            record.device_id,
+            record.bpm,
+            record.created_at,
             record.id,
         )
 
