@@ -163,11 +163,12 @@ setup occurs on the first incoming HTTP request handled by the process.
 
 ## Development Test Device
 
-For local development, the application seeds the following device if it is not
-already present in the database:
+For local development, set `SEED_TEST_DEVICE=1` and
+`TEST_DEVICE_API_KEY=<local-only-secret>` to seed a device if it is not already
+present in the database:
 
 - `device_id`: `smart-band-001`
-- `api_key`: `test-api-key-123`
+- `api_key`: value supplied by `TEST_DEVICE_API_KEY`
 
 > [!WARNING]
 > These credentials are hard-coded for local development only. Do not reuse
@@ -263,6 +264,11 @@ Additional documentation is available in [`docs/`](docs):
   acceptance criteria for unattended smart-band to edge-service interactions.
 - [`docs/class-diagram.puml`](docs/class-diagram.puml): PlantUML diagram of
   the bounded contexts, layers, and relationships.
+- [`docs/adrs.md`](docs/adrs.md): architecture decisions and their
+  consequences.
+
+Project history is tracked in [`CHANGELOG.md`](CHANGELOG.md) using the Keep a
+Changelog format.
 
 ## License
 

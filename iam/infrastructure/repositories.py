@@ -46,7 +46,7 @@ class DeviceRepository:
         except peewee.DoesNotExist:
             return None
 
-    def get_or_create_test_device(self) -> Device:
+    def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
         """Retrieve the default test device, creating it if absent.
 
         Performs an idempotent ``get_or_create`` against the ``devices``
@@ -59,8 +59,7 @@ class DeviceRepository:
             ``device_id='smart-band-001'``.
         """
         device, _ = DeviceModel.get_or_create(
-            device_id="smart-band-001",
-            defaults={"api_key": "test-api-key-123", "created_at": "2025-06-04T23:23:00Z"},
+            device_id=device_id,
+            defaults={"api_key": api_key, "created_at": "2025-06-04T23:23:00Z"},
         )
         return Device(device.device_id, device.api_key, device.created_at)
-

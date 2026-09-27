@@ -47,7 +47,7 @@ class AuthApplicationService:
         device: Device | None = self.device_repository.find_by_id_and_api_key(device_id, api_key)
         return self.auth_service.authenticate(device)
 
-    def get_or_create_test_device(self) -> Device:
+    def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
         """Retrieve the default test device, creating it if it does not exist.
 
         Intended for development and local testing only.  Delegates to the
@@ -58,5 +58,4 @@ class AuthApplicationService:
             Device: The :class:`~iam.domain.entities.Device` entity for the
             pre-configured test device (``device_id='smart-band-001'``).
         """
-        return self.device_repository.get_or_create_test_device()
-
+        return self.device_repository.get_or_create_test_device(device_id, api_key)

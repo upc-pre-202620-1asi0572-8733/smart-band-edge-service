@@ -27,14 +27,21 @@ def create_app() -> Flask:
     app = Flask(__name__)
     configure_database(os.getenv("DATABASE_PATH", "smart_band.db"))
     init_db()
-    app.config["SEED_TEST_DEVICE"] = os.getenv("SEED_TEST_DEVICE", "1") == "1"
+    app.config["SEED_TEST_DEVICE"] = os.getenv("SEED_TEST_DEVICE", "0") == "1"
+    app.config["TEST_DEVICE_ID"] = os.getenv("TEST_DEVICE_ID", "smart-band-001")
+    app.config["TEST_DEVICE_API_KEY"] = os.getenv("TEST_DEVICE_API_KEY")
 
     app.register_blueprint(iam_api)
     app.register_blueprint(health_api)
 
     if app.config["SEED_TEST_DEVICE"]:
+        if not app.config["TEST_DEVICE_API_KEY"]:
+            raise RuntimeError("TEST_DEVICE_API_KEY is required when SEED_TEST_DEVICE=1")
         auth_application_service = iam.application.services.AuthApplicationService()
-        auth_application_service.get_or_create_test_device()
+        auth_application_service.get_or_create_test_device(
+            app.config["TEST_DEVICE_ID"],
+            app.config["TEST_DEVICE_API_KEY"],
+        )
 
     @app.teardown_appcontext
     def close_database(_exception: BaseException | None) -> None:

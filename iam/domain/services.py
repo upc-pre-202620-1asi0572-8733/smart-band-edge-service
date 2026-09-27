@@ -18,7 +18,7 @@ class DeviceRepository(Protocol):
         """Look up a device by its identifier and API key."""
         ...
 
-    def get_or_create_test_device(self) -> Device:
+    def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
         """Retrieve the default test device, creating it if absent."""
         ...
 
@@ -49,4 +49,3 @@ class AuthService:
             succeeds); ``False`` otherwise.
         """
         return device is not None
-
