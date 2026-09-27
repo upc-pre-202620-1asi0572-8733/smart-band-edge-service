@@ -7,7 +7,6 @@ Provides the persistence adapter that maps between the
 Following the Repository pattern, callers in the application layer work only
 with domain entities and remain isolated from ORM and database details.
 """
-from typing import Optional
 
 import peewee
 
@@ -23,8 +22,7 @@ class DeviceRepository:
     domain layer has no dependency on Peewee.
     """
 
-    @staticmethod
-    def find_by_id_and_api_key(device_id: str, api_key: str) -> Optional[Device]:
+    def find_by_id_and_api_key(self, device_id: str, api_key: str) -> Device | None:
         """Look up a device by its identifier and API key.
 
         Queries the ``devices`` table for a row matching **both** ``device_id``
@@ -37,7 +35,7 @@ class DeviceRepository:
             api_key (str): The API key that must match the stored credential.
 
         Returns:
-            Optional[Device]: The corresponding :class:`~iam.domain.entities.Device`
+            Device | None: The corresponding :class:`~iam.domain.entities.Device`
             entity if a matching row exists; ``None`` otherwise.
         """
         try:
@@ -48,8 +46,7 @@ class DeviceRepository:
         except peewee.DoesNotExist:
             return None
 
-    @staticmethod
-    def get_or_create_test_device() -> Device:
+    def get_or_create_test_device(self) -> Device:
         """Retrieve the default test device, creating it if absent.
 
         Performs an idempotent ``get_or_create`` against the ``devices``
