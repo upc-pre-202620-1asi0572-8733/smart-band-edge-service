@@ -23,7 +23,9 @@ db = SqliteDatabase(None, timeout=30, pragmas={"busy_timeout": 30_000})
 
 def configure_database(database_path: str) -> None:
     """Configure the shared database before the application is created."""
-    db.init(str(Path(database_path)))
+    path = Path(database_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    db.init(str(path))
 
 
 def init_db() -> None:

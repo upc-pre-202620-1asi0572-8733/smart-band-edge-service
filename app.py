@@ -11,10 +11,11 @@ Typical usage::
     python app.py
 """
 
-import os
+from pathlib import Path
 
 from flask import Flask
 
+from config import load_config
 from health.application.services import HealthRecordApplicationService
 from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 from health.infrastructure.repositories import HealthRecordRepository
@@ -28,13 +29,11 @@ from shared.infrastructure.database import configure_database, db, init_db
 def create_app() -> Flask:
     """Create and initialize the Flask application."""
     app = Flask(__name__)
-    configure_database(os.getenv("DATABASE_PATH", "smart_band.db"))
+    app.config.from_mapping(load_config(Path(__file__).resolve().parent))
+    configure_database(app.config["DATABASE_PATH"])
     init_db()
     DeviceRepository().migrate_schema()
     HealthRecordRepository().migrate_schema()
-    app.config["SEED_TEST_DEVICE"] = os.getenv("SEED_TEST_DEVICE", "0") == "1"
-    app.config["TEST_DEVICE_ID"] = os.getenv("TEST_DEVICE_ID", "smart-band-001")
-    app.config["TEST_DEVICE_API_KEY"] = os.getenv("TEST_DEVICE_API_KEY")
 
     app.register_blueprint(iam_api)
     app.register_blueprint(health_api)
@@ -45,8 +44,6 @@ def create_app() -> Flask:
     )
 
     if app.config["SEED_TEST_DEVICE"]:
-        if not app.config["TEST_DEVICE_API_KEY"]:
-            raise RuntimeError("TEST_DEVICE_API_KEY is required when SEED_TEST_DEVICE=1")
         iam_authentication_service.get_or_create_test_device(
             app.config["TEST_DEVICE_ID"],
             app.config["TEST_DEVICE_API_KEY"],
@@ -63,4 +60,12 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    if app.config["APP_ENV"] != "development":
+        raise RuntimeError(
+            "The built-in Flask server is development-only; use a production WSGI server"
+        )
+    app.run(
+        debug=app.config["DEBUG"],
+        host=app.config["HOST"],
+        port=app.config["PORT"],
+    )

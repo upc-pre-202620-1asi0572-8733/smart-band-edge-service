@@ -147,10 +147,19 @@ pip install -r requirements.txt
 ### 3. Run the service
 
 ```sh
-SEED_TEST_DEVICE=1 TEST_DEVICE_API_KEY=test-api-key-123 python app.py
+APP_ENV=development python app.py
 ```
 
-The Flask application runs in debug mode when started this way.
+The checked-in `.env.development` provides non-secret local defaults.
+`APP_ENV=development` selects it, and process environment variables override
+values in the file. To seed a test device, enable `SEED_TEST_DEVICE` and set
+`TEST_DEVICE_API_KEY` in the process environment; use a unique, local-only key.
+
+For production, set `APP_ENV=production` in the process environment to select
+the checked-in `.env.production` defaults. Supply secrets through your
+deployment's secret/configuration mechanism, not a committed file. Production
+disables debug mode and test-device seeding, and should run behind a
+production WSGI server rather than Flask's built-in server.
 
 ## Runtime Behavior
 
@@ -160,16 +169,18 @@ The application performs bootstrap work before serving the first request:
 - creates the `devices` and `health_records` tables if they do not exist
 - migrates stored device credentials to salted PBKDF2 verifiers and adds
   revocation state to existing device tables
-- seeds a development test device if absent
+- migrates existing telemetry tables to support device-scoped idempotency keys
+- seeds a development test device only when explicitly enabled in development
 
 Database initialization and migrations run during application creation, before
-the service accepts requests.
+the service accepts requests. `DATABASE_PATH`, `DEBUG`, `HOST`, `PORT`,
+`SEED_TEST_DEVICE`, `TEST_DEVICE_ID`, and `TEST_DEVICE_API_KEY` are loaded from
+the selected environment file or process environment.
 
 ## Development Test Device
 
-For local development, set `SEED_TEST_DEVICE=1` and
-`TEST_DEVICE_API_KEY=<local-only-secret>` to seed a device if it is not already
-present in the database:
+To enable development test-device seeding, set `SEED_TEST_DEVICE=true` and
+`TEST_DEVICE_API_KEY` to a unique local-only value in the process environment:
 
 - `device_id`: `smart-band-001`
 - `api_key`: value supplied by `TEST_DEVICE_API_KEY`
@@ -291,6 +302,13 @@ Additional documentation is available in [`docs/`](docs):
 
 Project history is tracked in [`CHANGELOG.md`](CHANGELOG.md) using the Keep a
 Changelog format.
+
+Environment configuration defaults:
+
+- [`.env.development`](.env.development): local development defaults without
+  credentials.
+- [`.env.production`](.env.production): production defaults without secrets;
+  provide real secrets externally.
 
 ## License
 

@@ -1,0 +1,9 @@
+.env
+.env.*
+!.env.development
+!.env.production
+.venv/
+__pycache__/
+*.py[cod]
+smart_band.db
+var/

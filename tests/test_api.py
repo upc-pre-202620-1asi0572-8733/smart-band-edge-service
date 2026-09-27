@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 _test_directory = tempfile.TemporaryDirectory(prefix="smart-band-test-")
+os.environ["APP_ENV"] = "development"
 os.environ["DATABASE_PATH"] = os.path.join(_test_directory.name, "test.db")
 os.environ["SEED_TEST_DEVICE"] = "1"
 os.environ["TEST_DEVICE_API_KEY"] = "test-only-key"
