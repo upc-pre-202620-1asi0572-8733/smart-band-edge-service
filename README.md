@@ -150,13 +150,15 @@ pip install -r requirements.txt
 APP_ENV=development python app.py
 ```
 
-The checked-in `.env.development` provides non-secret local defaults.
-`APP_ENV=development` selects it, and process environment variables override
-values in the file. To seed a test device, enable `SEED_TEST_DEVICE` and set
-`TEST_DEVICE_API_KEY` in the process environment; use a unique, local-only key.
+The checked-in environment files contain environment-specific overrides;
+shared fallback defaults are centralized in `config.py`.
+`APP_ENV=development` selects `.env.development`, and process environment
+variables override values in the file. To seed a test device, enable
+`SEED_TEST_DEVICE` and set `TEST_DEVICE_API_KEY` in the process environment;
+use a unique, local-only key.
 
 For production, set `APP_ENV=production` in the process environment to select
-the checked-in `.env.production` defaults. Supply secrets through your
+`.env.production`. Supply secrets through your
 deployment's secret/configuration mechanism, not a committed file. Production
 disables debug mode and test-device seeding, and should run behind a
 production WSGI server rather than Flask's built-in server.

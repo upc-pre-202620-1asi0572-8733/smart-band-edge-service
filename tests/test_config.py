@@ -34,6 +34,20 @@ class LoadConfigTestCase(unittest.TestCase):
         self.assertFalse(config["DEBUG"])
         self.assertFalse(config["SEED_TEST_DEVICE"])
         self.assertIsNone(config["TEST_DEVICE_API_KEY"])
+        self.assertEqual(config["DATABASE_PATH"], str(Path(directory) / "var/smart_band.db"))
+
+    def test_loading_another_environment_does_not_reuse_dotenv_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env.development").write_text("DEBUG=true\n")
+            (root / ".env.production").write_text("DEBUG=false\n")
+            with patch.dict(os.environ, {}, clear=True):
+                development = load_config(root)
+                os.environ["APP_ENV"] = "production"
+                production = load_config(root)
+
+        self.assertTrue(development["DEBUG"])
+        self.assertFalse(production["DEBUG"])
 
     def test_rejects_debug_or_test_seeding_in_production(self):
         for setting in (
