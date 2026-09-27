@@ -2,7 +2,7 @@
 
 This module wires together the Flask application, registers the IAM and
 Health bounded-context Blueprints, and ensures the SQLite database is
-initialized (tables created, test device seeded) exactly once before the
+initialized (tables created, a test device seeded) exactly once before the
 first HTTP request is handled.
 
 Typical usage::
