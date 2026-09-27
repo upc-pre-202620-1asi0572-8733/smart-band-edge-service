@@ -1,15 +1,15 @@
 """Shared database infrastructure for the Smart Band Edge Service.
 
-Provides a single :class:`peewee.SqliteDatabase` instance (``db``) that is
+Provides a single: class:`peewee.SqliteDatabase` instance (``db``) that is
 imported by ORM models across all bounded contexts, ensuring every model
 operates on the same physical database file.
 
-The :func:`init_db` helper is called once at application start-up to open a
+The: func:`init_db` helper is called once at application start-up to open a
 connection and create any missing tables without affecting existing data
 (``safe=True``).
 
 Note:
-    The ``db`` object itself is not connected until :func:`init_db` is
+    The ``db`` object itself is not connected until: func:`init_db` is
     called.  Peewee's ``SqliteDatabase`` manages the connection lifecycle
     via its own thread-local storage.
 """
@@ -27,7 +27,7 @@ def init_db() -> None:
     loading, then issues a ``CREATE TABLE IF NOT EXISTS`` for each model.
 
     This function is idempotent: calling it when the tables already exist is
-    safe and has no side-effects (``safe=True`` suppresses ``CREATE TABLE``
+    safe and has no side effects (``safe=True`` suppresses ``CREATE TABLE``
     errors for pre-existing tables).
 
     Side effects:
