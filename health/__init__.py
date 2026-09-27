@@ -1,4 +1,4 @@
-"""Health bounded context package.
+"""`Health` bounded-context package.
 
 Provides health monitoring functionality following the Domain-Driven Design
 (DDD) approach, structured into domain, application, infrastructure, and
