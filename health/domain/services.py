@@ -5,11 +5,20 @@ a single entity.  ``HealthRecordService`` is responsible for validating raw
 sensor input and constructing a well-formed :class:`~health.domain.entities.HealthRecord`
 aggregate, enforcing the invariants of the Health bounded context.
 """
-from datetime import datetime, timezone
+from datetime import datetime, UTC
+from typing import Protocol
 
 from dateutil.parser import parse
 
 from health.domain.entities import HealthRecord
+
+
+class HealthRecordRepository(Protocol):
+    """Protocol for health record persistence."""
+
+    def save(self, health_record: HealthRecord) -> HealthRecord:
+        """Persist a transient HealthRecord entity."""
+        ...
 
 
 class HealthRecordService:
@@ -55,9 +64,9 @@ class HealthRecordService:
             if not (0 <= bpm <= 200):
                 raise ValueError("Invalid BPM value")
             if created_at:
-                parsed_created_at = parse(created_at).astimezone(timezone.utc)
+                parsed_created_at = parse(created_at).astimezone(UTC)
             else:
-                parsed_created_at = datetime.now(timezone.utc)
+                parsed_created_at = datetime.now(UTC)
         except (ValueError, TypeError):
             raise ValueError("Invalid data format")
 
