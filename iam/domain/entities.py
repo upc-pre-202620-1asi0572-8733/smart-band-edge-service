@@ -1,8 +1,8 @@
 """Domain entities for the IAM bounded context.
 
 This module defines the aggregate root for the IAM bounded context.
-Entities carry identity across their lifetime and encapsulate state that
-is only modified by domain services enforcing business invariants.
+Entities carry identity across their lifetime and encapsulate state
+only modified by domain services enforcing business invariants.
 """
 from dataclasses import dataclass
 from datetime import datetime
