@@ -38,11 +38,11 @@ def init_db() -> None:
     errors for pre-existing tables).
 
     Side effects:
-        - Opens a connection to ``smart_band.db`` (creating the file if it
-          does not exist).
+        - Opens the configured SQLite database (creating the file if it does
+          not exist).
         - Creates the ``devices`` table if absent.
         - Creates the ``health_records`` table if absent.
-        - Closes the connection after table creation.
+        - Keeps the application-scoped connection open until Flask teardown.
     """
     if db.is_closed():
         db.connect()

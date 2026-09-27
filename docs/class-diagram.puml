@@ -12,20 +12,27 @@ package "Health Bounded Context" #DEEAFF {
   ' Domain Layer
   package "domain" #E2F0FF {
     class HealthRecord {
-      id: int
-      device_id: str
-      bpm: float
-      created_at: datetime
-      +__init__(device_id, bpm, created_at, id)
+      id: int | None
+      submitting_device: SubmittingDevice
+      heart_rate: HeartRateBpm
+      recorded_at: RecordedAt
+      +record(submitting_device, bpm, created_at): HealthRecord
+      +with_persistence_id(id): HealthRecord
     }
 
     class SubmittingDevice {
       device_id: str
     }
 
-    class HealthRecordService {
-      +__init__()
-      +create_record(device_id, bpm, created_at): HealthRecord
+    class HeartRateBpm {
+      value: float
+      +__init__(value)
+    }
+
+    class RecordedAt {
+      value: datetime
+      +__init__(value)
+      +now(): RecordedAt
     }
   }
 
@@ -33,7 +40,6 @@ package "Health Bounded Context" #DEEAFF {
   package "application" #D5E7FF {
     class HealthRecordApplicationService {
       -health_record_repository: HealthRecordRepository
-      -health_record_service: HealthRecordService
       -iam_anti_corruption_layer: IamAntiCorruptionLayer
       +__init__()
       +create_health_record(device_id, bpm, created_at, api_key): HealthRecord
@@ -75,14 +81,21 @@ package "IAM Bounded Context" #FFEBDE {
   package "domain" #FFF2E8 {
     class Device {
       device_id: str
-      api_key: str
+      credential: ApiCredential
       created_at: datetime
-      +__init__(device_id, api_key, created_at)
+      revoked_at: datetime | None
+      +register(device_id, api_key): Device
+      +authenticate(api_key): bool
+      +revoke(): Device
+      +rotate_api_key(new_api_key): Device
     }
 
-    class AuthService {
-      +__init__()
-      +authenticate(device): bool
+    class ApiCredential {
+      salt: bytes
+      digest: bytes
+      iterations: int
+      +create(secret): ApiCredential
+      +matches(secret): bool
     }
   }
 
@@ -90,9 +103,11 @@ package "IAM Bounded Context" #FFEBDE {
   package "application" #FFE6D5 {
     class AuthApplicationService {
       -device_repository: DeviceRepository
-      -auth_service: AuthService
       +__init__()
       +authenticate(device_id, api_key): bool
+      +register_device(device_id, api_key): Device
+      +rotate_api_key(device_id, new_api_key): Device
+      +revoke_device(device_id): Device
       +get_or_create_test_device(): Device
     }
   }
@@ -101,12 +116,14 @@ package "IAM Bounded Context" #FFEBDE {
   package "infrastructure" #FFDAC1 {
     class DeviceModel {
       device_id: CharField
-      api_key: CharField
+      credential_verifier: CharField
       created_at: DateTimeField
+      revoked_at: DateTimeField
     }
 
     class DeviceRepository {
-      +find_by_id_and_api_key(device_id, api_key): Device
+      +find_by_device_id(device_id): Device
+      +save(device): Device
       +get_or_create_test_device(): Device
     }
   }
@@ -143,20 +160,20 @@ class app {
 
 ' Health bounded context relationships
 HealthRecordApplicationService --> HealthRecordRepository: uses
-HealthRecordApplicationService --> HealthRecordService: uses
 HealthRecordApplicationService --> IamAntiCorruptionLayer: uses
 HealthRecordRepository --> HealthRecordModel: uses
 HealthRecordRepository ..> HealthRecord: creates
-HealthRecordService ..> HealthRecord: creates
+HealthRecord ..> HeartRateBpm: validates
+HealthRecord ..> RecordedAt: normalizes
 health_api --> HealthRecordApplicationService: uses
 IamAntiCorruptionLayer ..> SubmittingDevice: translates to
 
 ' IAM bounded context relationships
 AuthApplicationService --> DeviceRepository: uses
-AuthApplicationService --> AuthService: uses
 DeviceRepository --> DeviceModel: uses
 DeviceRepository ..> Device: creates
-AuthService ..> Device: authenticates
+Device ..> ApiCredential: verifies
+Device --> ApiCredential: owns
 iam_api --> AuthApplicationService: uses
 
 ' Cross-context relationships

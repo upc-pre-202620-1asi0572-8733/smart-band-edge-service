@@ -311,3 +311,46 @@ typed datetimes into the application layer.
   direct record construction.
 - Relying only on request schema validation, which would not protect other
   record creation paths.
+
+## ADR-0010: Make the IAM device aggregate own credential lifecycle
+
+- **Status**: Accepted
+- **Date**: 2026-09-27
+
+### Context
+
+IAM previously queried by both device ID and raw API key, and its domain
+authentication service only converted repository presence into a boolean.
+Device lifecycle rules such as credential rotation and revocation were not
+represented in the domain model, and credentials were persisted in plaintext.
+
+### Decision
+
+Make `Device` responsible for authenticating credentials, rotating an active
+device's credential, and revoking access. Represent stored credentials with an
+`ApiCredential` value object that uses a salted PBKDF2 verifier and
+constant-time comparison. Repositories load devices by ID and persist aggregate
+state; authentication policy is evaluated by the aggregate. Application
+startup adds the revocation column and migrates legacy plaintext credentials
+to verifiers.
+
+### Consequences
+
+- Credential acceptance and active/revoked state are evaluated together by
+  the aggregate.
+- Repository queries no longer include or compare raw credentials.
+- Raw API keys are not returned from persistence or represented in `Device`.
+- Startup performs a one-time data migration; application startup can take
+  longer for a database with many legacy credentials.
+- PBKDF2 adds per-authentication CPU cost; the work factor should be measured
+  against expected edge-device capacity and threat model.
+- Credential rotation and revocation are domain capabilities exposed through
+  application services; no public management endpoints are added here.
+
+### Alternatives considered
+
+- Hashing credentials in repository code, which would leave credential policy
+  outside the aggregate.
+- Keeping lookup-by-ID-and-key, which embeds authentication policy in SQL.
+- Adding lifecycle state without persisting it, which would lose revocation on
+  restart.

@@ -1,65 +1,79 @@
-"""Repository implementation for the IAM bounded context.
-
-Provides the persistence adapter that maps between the
-:class:`~iam.domain.entities.Device` domain entity and the
-:class:`~iam.infrastructure.models.Device` Peewee ORM model.
-
-Following the Repository pattern, callers in the application layer work only
-with domain entities and remain isolated from ORM and database details.
-"""
+"""Repository implementation for IAM device aggregates."""
 
 import peewee
 
+from iam.domain.credentials import ApiCredential
 from iam.domain.entities import Device
 from iam.infrastructure.models import Device as DeviceModel
 
 
 class DeviceRepository:
-    """Repository that persists and reconstructs :class:`~iam.domain.entities.Device` entities.
+    """Persist and reconstruct IAM device aggregates."""
 
-    Implements the collection-like interface expected by application services.
-    All ORM-to-entity mapping is contained within this class, ensuring the
-    domain layer has no dependency on Peewee.
-    """
+    def migrate_schema(self) -> None:
+        """Add revocation state and hash credentials stored by older versions."""
+        database = DeviceModel._meta.database
+        with database.atomic():
+            columns = {column.name for column in database.get_columns("devices")}
+            if "revoked_at" not in columns:
+                database.execute_sql(
+                    'ALTER TABLE "devices" ADD COLUMN "revoked_at" DATETIME NULL'
+                )
 
-    def find_by_id_and_api_key(self, device_id: str, api_key: str) -> Device | None:
-        """Look up a device by its identifier and API key.
+            for row in DeviceModel.select():
+                stored = row.credential_verifier
+                if ApiCredential.is_encoded(stored):
+                    ApiCredential.from_encoded(stored)
+                    continue
+                row.credential_verifier = ApiCredential.create(stored).encode()
+                row.save(only=[DeviceModel.credential_verifier])
 
-        Queries the ``devices`` table for a row matching **both** ``device_id``
-        and ``api_key``.  Returning ``None`` when no match is found (rather
-        than raising) lets the domain service apply the authentication rule
-        without catching infrastructure exceptions.
-
-        Args:
-            device_id (str): The device identifier to search for.
-            api_key (str): The API key that must match the stored credential.
-
-        Returns:
-            Device | None: The corresponding :class:`~iam.domain.entities.Device`
-            entity if a matching row exists; ``None`` otherwise.
-        """
+    def find_by_device_id(self, device_id: str) -> Device | None:
+        """Load a device by identity without embedding credential policy in SQL."""
         try:
-            device = DeviceModel.get(
-                (DeviceModel.device_id == device_id) & (DeviceModel.api_key == api_key)
-            )
-            return Device(device.device_id, device.api_key, device.created_at)
+            row = DeviceModel.get(DeviceModel.device_id == device_id)
         except peewee.DoesNotExist:
             return None
+        return self._to_entity(row)
+
+    def save(self, device: Device) -> Device:
+        """Insert or update the persisted aggregate state."""
+        values = {
+            "credential_verifier": device.credential.encode(),
+            "created_at": device.created_at,
+            "revoked_at": device.revoked_at,
+        }
+        with DeviceModel._meta.database.atomic():
+            row = DeviceModel.get_or_none(DeviceModel.device_id == device.device_id)
+            if row is None:
+                DeviceModel.create(device_id=device.device_id, **values)
+            else:
+                DeviceModel.update(**values).where(
+                    DeviceModel.device_id == device.device_id
+                ).execute()
+        return device
 
     def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
-        """Retrieve the default test device, creating it if absent.
-
-        Performs an idempotent ``get_or_create`` against the ``devices``
-        table.  The test device uses well-known, hard-coded credentials
-        intended for local development and integration testing only — these
-        credentials must never be used in a production environment.
-
-        Returns:
-            Device: The :class:`~iam.domain.entities.Device` entity for
-            ``device_id='smart-band-001'``.
-        """
-        device, _ = DeviceModel.get_or_create(
+        """Retrieve the configured development device or register it if absent."""
+        row = DeviceModel.get_or_none(DeviceModel.device_id == device_id)
+        if row is not None:
+            return self._to_entity(row)
+        new_device = Device.register(device_id, api_key)
+        row, _ = DeviceModel.get_or_create(
             device_id=device_id,
-            defaults={"api_key": api_key, "created_at": "2025-06-04T23:23:00Z"},
+            defaults={
+                "credential_verifier": new_device.credential.encode(),
+                "created_at": new_device.created_at,
+                "revoked_at": None,
+            },
         )
-        return Device(device.device_id, device.api_key, device.created_at)
+        return self._to_entity(row)
+
+    @staticmethod
+    def _to_entity(row: DeviceModel) -> Device:
+        return Device(
+            row.device_id,
+            ApiCredential.from_encoded(row.credential_verifier),
+            row.created_at,
+            row.revoked_at,
+        )

@@ -147,7 +147,7 @@ pip install -r requirements.txt
 ### 3. Run the service
 
 ```sh
-python app.py
+SEED_TEST_DEVICE=1 TEST_DEVICE_API_KEY=test-api-key-123 python app.py
 ```
 
 The Flask application runs in debug mode when started this way.
@@ -158,10 +158,12 @@ The application performs bootstrap work before serving the first request:
 
 - initializes the SQLite database
 - creates the `devices` and `health_records` tables if they do not exist
+- migrates stored device credentials to salted PBKDF2 verifiers and adds
+  revocation state to existing device tables
 - seeds a development test device if absent
 
-Database initialization is triggered by the Flask `before_request` hook, so the
-setup occurs on the first incoming HTTP request handled by the process.
+Database initialization and migrations run during application creation, before
+the service accepts requests.
 
 ## Development Test Device
 
@@ -173,8 +175,9 @@ present in the database:
 - `api_key`: value supplied by `TEST_DEVICE_API_KEY`
 
 > [!WARNING]
-> These credentials are hard-coded for local development only. Do not reuse
-> them in production or on real IoT deployments.
+> This device is intended for local development only. Do not enable test-device
+> seeding or reuse development credentials in production or on real IoT
+> deployments.
 
 ## API Contract
 
@@ -248,7 +251,9 @@ curl -X POST http://127.0.0.1:5000/api/v1/health-monitoring/data-records \
 When adapting this service for a real IoT solution, consider the following:
 
 - **Credential management**: replace hard-coded development credentials with a
-  secure enrollment or provisioning flow.
+  secure enrollment or provisioning flow. IAM stores a salted verifier rather
+  than the API key, and its device aggregate supports credential rotation and
+  revocation through application services.
 - **Persistence**: SQLite is suitable for local development and lightweight
   edge deployments, but not ideal for high-write concurrency.
 - **Observability**: add structured logging, trace correlation, and a proper

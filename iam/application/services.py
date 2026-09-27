@@ -5,34 +5,25 @@ repositories.  They contain no domain logic themselves; all business rules live
 in the domain layer.
 """
 from iam.domain.entities import Device
-from iam.domain.services import AuthService, DeviceRepository
+from iam.domain.repositories import DeviceRepository
 from iam.infrastructure.repositories import DeviceRepository as DeviceRepositoryImpl
 
 
 class AuthApplicationService:
-    """Application service that orchestrates device-authentication use-cases.
-
-    Coordinates the :class:`~iam.infrastructure.repositories.DeviceRepository`
-    (for reading device credentials) and the
-    :class:`~iam.domain.services.AuthService` (for applying the authentication
-    business rule).
-    """
+    """Application service coordinating IAM device lifecycle use cases."""
 
     def __init__(
         self,
         device_repository: DeviceRepository | None = None,
-        auth_service: AuthService | None = None,
     ):
         """Initialise the service with its required collaborators."""
         self.device_repository = device_repository or DeviceRepositoryImpl()
-        self.auth_service = auth_service or AuthService()
 
     def authenticate(self, device_id: str, api_key: str) -> bool:
         """Authenticate a device by its ID and API key.
 
-        Looks up the device in the repository using the supplied credentials.
-        The domain service then evaluates whether the result constitutes a
-        successful authentication.
+        Loads the aggregate by identity and asks it to verify the presented
+        credential and current access state.
 
         Args:
             device_id (str): Unique identifier of the device (e.g.
@@ -44,15 +35,33 @@ class AuthApplicationService:
             bool: ``True`` if a device with the given ``device_id`` and
             ``api_key`` exists in the repository; ``False`` otherwise.
         """
-        device: Device | None = self.device_repository.find_by_id_and_api_key(device_id, api_key)
-        return self.auth_service.authenticate(device)
+        device = self.device_repository.find_by_device_id(device_id)
+        return device is not None and device.authenticate(api_key)
+
+    def register_device(self, device_id: str, api_key: str) -> Device:
+        """Register a new device, protecting its credential in the aggregate."""
+        if self.device_repository.find_by_device_id(device_id) is not None:
+            raise ValueError("Device is already registered")
+        return self.device_repository.save(Device.register(device_id, api_key))
+
+    def revoke_device(self, device_id: str) -> Device:
+        """Revoke an active device and persist its new aggregate state."""
+        device = self.device_repository.find_by_device_id(device_id)
+        if device is None:
+            raise ValueError("Device not found")
+        return self.device_repository.save(device.revoke())
+
+    def rotate_api_key(self, device_id: str, new_api_key: str) -> Device:
+        """Rotate an active device credential and persist its new verifier."""
+        device = self.device_repository.find_by_device_id(device_id)
+        if device is None:
+            raise ValueError("Device not found")
+        return self.device_repository.save(device.rotate_api_key(new_api_key))
 
     def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
         """Retrieve the default test device, creating it if it does not exist.
 
-        Intended for development and local testing only.  Delegates to the
-        repository to perform an idempotent ``get_or_create`` operation against
-        the ``devices`` table.
+        Intended for development and local testing only.
 
         Returns:
             Device: The :class:`~iam.domain.entities.Device` entity for the
