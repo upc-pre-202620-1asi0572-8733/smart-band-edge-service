@@ -7,10 +7,18 @@ solely with HTTP request/response handling and delegating to the application
 service.
 """
 from flask import Blueprint, request, jsonify
+from pydantic import BaseModel, Field
 
 from iam.application.services import AuthApplicationService
 
 iam_api = Blueprint("iam_api", __name__)
+
+
+class AuthRequest(BaseModel):
+    """Pydantic model for validating the authentication request data."""
+
+    device_id: str | None = Field(None, description="Identifier of the device.")
+
 
 # Module-level singleton — instantiated once per worker process.
 auth_service = AuthApplicationService()
@@ -41,10 +49,23 @@ def authenticate_request():
         ``None`` when the request is successfully authenticated, allowing the
         caller to proceed with its own logic.
     """
-    device_id = request.json.get("device_id") if request.json else None
     api_key = request.headers.get("X-API-Key")
-    if not device_id or not api_key:
-        return jsonify({"error": "Missing device_id or X-API-Key"}), 401
+    if not api_key:
+        return jsonify({"error": "Missing X-API-Key"}), 401
+
+    try:
+        # We use a partial model or safe check since request.json might be missing
+        if not request.json:
+            return jsonify({"error": "Missing request body"}), 401
+
+        auth_data = AuthRequest.model_validate(request.json)
+        device_id = auth_data.device_id
+    except Exception:
+        return jsonify({"error": "Invalid request body"}), 401
+
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 401
+
     if not auth_service.authenticate(device_id, api_key):
         return jsonify({"error": "Invalid device_id or API key"}), 401
     return None
