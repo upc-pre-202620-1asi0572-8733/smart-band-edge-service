@@ -20,7 +20,8 @@ instead of being listed individually.
 
 - Application configuration now loads environment-specific dotenv files,
   gives process environment variables precedence without mutating process
-  state, centralizes fallback defaults, and enforces safe production settings.
+  state, reads environment settings from those files, and enforces safe
+  production settings.
 - Health ingestion now requires device-scoped event IDs, returns the original
   record for identical retries, and rejects conflicting reuse with `409`.
 - Existing Health databases receive an additive event-ID migration and unique

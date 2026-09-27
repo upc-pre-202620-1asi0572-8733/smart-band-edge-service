@@ -150,12 +150,12 @@ pip install -r requirements.txt
 APP_ENV=development python app.py
 ```
 
-The checked-in environment files contain environment-specific overrides;
-shared fallback defaults are centralized in `config.py`.
+The checked-in environment files define the settings for each environment.
 `APP_ENV=development` selects `.env.development`, and process environment
-variables override values in the file. To seed a test device, enable
-`SEED_TEST_DEVICE` and set `TEST_DEVICE_API_KEY` in the process environment;
-use a unique, local-only key.
+variables override values in that file. `config.py` parses and validates the
+settings; it does not supply defaults for missing settings. To seed a test
+device, enable `SEED_TEST_DEVICE` and set `TEST_DEVICE_API_KEY` in the process
+environment; use a unique, local-only key.
 
 For production, set `APP_ENV=production` in the process environment to select
 `.env.production`. Supply secrets through your

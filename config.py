@@ -18,16 +18,6 @@ class AppConfig(TypedDict):
     PORT: int
 
 
-_DEFAULTS = {
-    "DEBUG": "false",
-    "SEED_TEST_DEVICE": "false",
-    "TEST_DEVICE_ID": "smart-band-001",
-    "TEST_DEVICE_API_KEY": "",
-    "HOST": "127.0.0.1",
-    "PORT": "5000",
-}
-
-
 def _as_bool(name: str, value: str) -> bool:
     normalized = value.strip().lower()
     if normalized in {"1", "true", "yes", "on"}:
@@ -38,16 +28,12 @@ def _as_bool(name: str, value: str) -> bool:
 
 
 def load_config(project_root: Path) -> AppConfig:
-    """Load defaults, selected dotenv values, then process environment overrides."""
+    """Load the selected dotenv file, then apply process environment overrides."""
     environment_name = os.getenv("APP_ENV", "development").strip().lower()
     if environment_name not in {"development", "production"}:
         raise ValueError("APP_ENV must be 'development' or 'production'")
 
     values = {
-        **_DEFAULTS,
-        "DATABASE_PATH": (
-            "smart_band.db" if environment_name == "development" else "var/smart_band.db"
-        ),
         **{
             key: value
             for key, value in dotenv_values(project_root / f".env.{environment_name}").items()
@@ -56,14 +42,20 @@ def load_config(project_root: Path) -> AppConfig:
         **os.environ,
     }
 
-    debug = _as_bool("DEBUG", values["DEBUG"])
-    seed_test_device = _as_bool("SEED_TEST_DEVICE", values["SEED_TEST_DEVICE"])
+    configured_environment = _required(values, "APP_ENV")
+    if configured_environment.strip().lower() != environment_name:
+        raise ValueError(
+            f"APP_ENV in .env.{environment_name} must be '{environment_name}'"
+        )
+
+    debug = _as_bool("DEBUG", _required(values, "DEBUG"))
+    seed_test_device = _as_bool("SEED_TEST_DEVICE", _required(values, "SEED_TEST_DEVICE"))
     if environment_name == "production" and debug:
         raise ValueError("DEBUG must be false in production")
     if environment_name == "production" and seed_test_device:
         raise ValueError("SEED_TEST_DEVICE must be false in production")
 
-    database_path = values["DATABASE_PATH"]
+    database_path = _required(values, "DATABASE_PATH")
     if not database_path.strip():
         raise ValueError("DATABASE_PATH cannot be empty")
     database = Path(database_path).expanduser()
@@ -71,17 +63,17 @@ def load_config(project_root: Path) -> AppConfig:
         database = project_root / database
 
     try:
-        port = int(values["PORT"])
+        port = int(_required(values, "PORT"))
     except ValueError as error:
         raise ValueError("PORT must be an integer") from error
     if not 1 <= port <= 65535:
         raise ValueError("PORT must be between 1 and 65535")
 
-    api_key = values["TEST_DEVICE_API_KEY"].strip() or None
+    api_key = values.get("TEST_DEVICE_API_KEY", "").strip() or None
     if seed_test_device and not api_key:
         raise ValueError("TEST_DEVICE_API_KEY is required when seeding is enabled")
-    device_id = values["TEST_DEVICE_ID"].strip()
-    host = values["HOST"].strip()
+    device_id = _required(values, "TEST_DEVICE_ID").strip()
+    host = _required(values, "HOST").strip()
     if seed_test_device and not device_id:
         raise ValueError("TEST_DEVICE_ID cannot be empty when seeding is enabled")
     if not host:
@@ -97,3 +89,11 @@ def load_config(project_root: Path) -> AppConfig:
         "HOST": host,
         "PORT": port,
     }
+
+
+def _required(values: dict[str, str], name: str) -> str:
+    """Return a configured value or report the missing environment setting."""
+    try:
+        return values[name]
+    except KeyError as error:
+        raise ValueError(f"{name} must be set in the selected dotenv file or environment") from error
