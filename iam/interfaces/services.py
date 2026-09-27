@@ -17,7 +17,8 @@ iam_api = Blueprint("iam_api", __name__)
 class AuthRequest(BaseModel):
     """Pydantic model for validating the authentication request data."""
 
-    model_config = ConfigDict(extra="forbid")
+    # The shared health payload contains fields IAM does not own.
+    model_config = ConfigDict(extra="ignore")
 
     device_id: str | None = Field(None, description="Identifier of the device.")
 
