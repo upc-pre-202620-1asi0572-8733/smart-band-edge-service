@@ -1,0 +1,241 @@
+# Architecture Decision Records
+
+This document records decisions that shape the Smart Band Edge Service. The
+records are intentionally concise and focus on decisions that affect system
+boundaries, integration contracts, or operational behavior.
+
+These records were documented retrospectively from the implementation and
+project history. New records should be appended rather than rewriting an
+accepted decision. If a decision changes, add a new ADR that supersedes the
+earlier record and link the two records.
+
+## ADR format
+
+Each record includes:
+
+- **Status**: `Accepted`, `Superseded`, or `Deprecated`
+- **Date**: the date the decision was made or, for retrospective records, the
+  date the decision first became evident in project history
+- **Context**: the problem and constraints
+- **Decision**: the chosen approach
+- **Consequences**: important benefits and trade-offs
+- **Alternatives considered**: credible options that were not selected
+
+## ADR-0001: Organize the service around DDD-inspired bounded contexts
+
+- **Status**: Accepted
+- **Date**: 2025-06-04
+
+### Context
+
+Authentication and health telemetry have different business responsibilities
+and are expected to evolve independently. Mixing them in a single technical
+module would make device identity concerns leak into the telemetry model.
+
+### Decision
+
+Structure the service as two bounded contexts:
+
+- **IAM** owns device identity and API-key authentication.
+- **Health** owns heart-rate validation and health-record persistence.
+
+Each context uses domain, application, infrastructure, and interface layers.
+The Health application service may ask IAM to validate a device, but Health
+does not own authentication rules.
+
+### Consequences
+
+- Business responsibilities and ownership are explicit.
+- Domain code remains independent of Flask and Peewee.
+- Cross-context calls must remain small and intentional.
+- The structure adds more modules than a single-module Flask application.
+
+### Alternatives considered
+
+- A single application module containing routes, validation, and persistence.
+- A purely technical package structure organized only by framework layer.
+
+## ADR-0002: Use SQLite with Peewee for local edge persistence
+
+- **Status**: Accepted
+- **Date**: 2025-06-04
+
+### Context
+
+The service needs durable local storage for device registrations and incoming
+health records while remaining lightweight for development and small edge
+deployments.
+
+### Decision
+
+Use SQLite as the local database and Peewee as the ORM. Keep ORM models and
+repository implementations in the infrastructure layer so domain entities
+and protocols do not depend on either technology.
+
+### Consequences
+
+- Local setup has no external database service dependency.
+- The repository boundary allows the persistence technology to be replaced.
+- SQLite is appropriate for the current scope but is not a default choice for
+  high-write concurrency or centralized multi-instance workloads.
+- A production deployment may require migration, backup, locking, and
+  concurrency policies that are not yet implemented.
+
+### Alternatives considered
+
+- PostgreSQL for stronger multi-client and operational capabilities.
+- An in-memory store, which would not provide durable telemetry.
+
+## ADR-0003: Authenticate devices with a paired API key
+
+- **Status**: Accepted
+- **Date**: 2025-06-05
+
+### Context
+
+Unattended smart-band requests need a simple credential that firmware can send
+without an interactive user session. The edge service must reject unknown
+devices before accepting telemetry.
+
+### Decision
+
+Require the device identifier in the JSON request body and its paired secret
+in the `X-API-Key` header. IAM validates the pair against the registered
+device repository. Protected routes call the shared authentication helper
+before executing their use case.
+
+### Consequences
+
+- Device-to-service integration is simple and explicit.
+- Authentication can be reused by additional bounded-context endpoints.
+- API keys must be provisioned, rotated, stored, and transmitted securely.
+- The seeded development credential is not suitable for production.
+
+### Alternatives considered
+
+- User-oriented sessions or OAuth, which do not fit unattended device
+  ingestion.
+- Client certificates or signed requests, which provide stronger guarantees
+  but require more device provisioning and lifecycle infrastructure.
+
+## ADR-0004: Validate request payloads at the HTTP boundary with Pydantic
+
+- **Status**: Accepted
+- **Date**: 2026-09-27
+
+### Context
+
+Malformed JSON and invalid field values should be rejected before the
+application service runs. The API contract includes required fields, numeric
+types, and a BPM range.
+
+### Decision
+
+Use Pydantic request models in the Flask interface layer. The interface maps
+validation failures to `400 Bad Request`; domain services remain responsible
+for business invariants that apply beyond this particular transport.
+
+### Consequences
+
+- HTTP contracts are explicit and errors are handled close to the boundary.
+- Application and domain services can be called without depending on Flask
+  request objects.
+- Validation rules may need coordination when additional transports are
+  introduced.
+- Pydantic becomes a runtime dependency.
+
+### Alternatives considered
+
+- Manual dictionary checks in each route.
+- Relying only on domain validation after transport parsing.
+
+## ADR-0005: Normalize accepted timestamps to UTC
+
+- **Status**: Accepted
+- **Date**: 2025-06-05
+
+### Context
+
+Devices may report timestamps with different local offsets, while persisted
+telemetry must be comparable across devices and deployments.
+
+### Decision
+
+Accept ISO 8601 timestamps, convert offset-aware values to UTC, and generate
+the current UTC time when `created_at` is omitted. Persist and return the
+normalized value.
+
+### Consequences
+
+- Queries and downstream processing use one consistent time basis.
+- Original device offset information is not retained separately.
+- Device clocks and malformed timestamps remain input-quality concerns.
+
+### Alternatives considered
+
+- Persisting each device's local timestamp and offset unchanged.
+- Requiring every device to normalize to UTC before sending.
+
+## ADR-0006: Bootstrap storage on the first request
+
+- **Status**: Superseded by ADR-0007
+- **Date**: 2025-06-05
+
+### Context
+
+The lightweight service should start without a manual database preparation
+step. The development environment also needs a known test device.
+
+### Decision
+
+Use Flask's `before_request` hook with a process-local guard to initialize the
+SQLite database, create missing tables, and seed the development device once
+before the first handled request.
+
+### Consequences
+
+- Local startup is simple and setup is idempotent for the current process.
+- The first request bears initialization latency.
+- Initialization is coupled to request handling and does not provide a
+  migration or readiness lifecycle for production.
+- Multi-worker startup behavior requires care because each worker has its own
+  process-local guard.
+
+### Alternatives considered
+
+- An explicit startup or deployment command.
+- Flask application-factory initialization before serving requests.
+- A migration framework and managed provisioning workflow.
+
+## ADR-0007: Initialize through an application factory
+
+- **Status**: Accepted
+- **Date**: 2026-09-27
+
+### Context
+
+Initialization tied to the first request delayed failures until traffic arrived,
+used a process-local flag, and behaved inconsistently across workers. Database
+connections also need a predictable Flask lifecycle.
+
+### Decision
+
+Create the Flask application through `create_app()`. Configure the database
+from `DATABASE_PATH`, initialize tables before the application serves requests,
+and close the Peewee connection in `teardown_appcontext`. Development-device
+seeding is controlled explicitly by `SEED_TEST_DEVICE` and
+`TEST_DEVICE_API_KEY`.
+
+### Consequences
+
+- Configuration and initialization failures occur during application creation.
+- Database cleanup follows Flask's application-context lifecycle.
+- The application is easier to test and deploy with different settings.
+- Schema migrations and multi-process coordination still require a dedicated
+  migration/deployment mechanism.
+
+### Alternatives considered
+
+- Retaining the first-request flag and adding locking around it.
+- Running a separate manual initialization command without application-factory
+  integration.

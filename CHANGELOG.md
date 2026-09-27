@@ -1,0 +1,53 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
+and the project intends to follow [Semantic Versioning](https://semver.org/)
+for published releases. Changes are grouped by user-visible or
+maintainer-relevant impact; implementation-only commits are consolidated
+instead of being listed individually.
+
+## [Unreleased]
+
+### Added
+
+- Architecture decision records in [`docs/adrs.md`](docs/adrs.md), covering
+  the service boundaries, persistence, authentication, validation, time
+  handling, and startup lifecycle.
+
+### Changed
+
+- Application initialization now uses a Flask application factory with
+  environment-configured database lifecycle and teardown.
+- Development test-device seeding is opt-in and requires an explicitly
+  configured API key.
+- API validation distinguishes malformed requests from authentication failures,
+  rejects unknown Health payload fields, and requires timezone-aware timestamps.
+- Added standard-library regression tests for authenticated ingestion and
+  request error semantics.
+- Removed the unused direct `python-dateutil` dependency.
+- Domain entities are immutable frozen dataclasses with explicit type hints.
+- Repository dependencies are expressed through domain protocols and injected
+  into application services, improving separation from Peewee and testability.
+- Request payloads are validated with Pydantic at the HTTP boundary, including
+  the `0..200` BPM constraint.
+- Repository methods use instance-bound collaborators consistently.
+- Dependency versions were refreshed and Pydantic was added to the runtime
+  requirements.
+- Module and project documentation was clarified to describe the implemented
+  IoT edge scope and DDD-inspired structure.
+
+## Initial implementation - 2025-06-05
+
+### Added
+
+- Initial smart-band edge API for authenticated heart-rate ingestion.
+- IAM and Health bounded contexts with domain, application, infrastructure,
+  and interface layers.
+- `POST /api/v1/health-monitoring/data-records` endpoint.
+- Device authentication using `device_id` and the `X-API-Key` header.
+- SQLite persistence through Peewee for devices and health records.
+- UTC normalization for ISO 8601 telemetry timestamps.
+- First-request database initialization and development-device seeding.
+- Project README, technical stories, class diagram, and MIT license.

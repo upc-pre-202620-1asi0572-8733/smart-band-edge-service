@@ -123,7 +123,6 @@ prioritization as the IoT edge capabilities grow.
 - Flask
 - Peewee
 - SQLite
-- python-dateutil
 
 Exact Python dependencies are declared in [`requirements.txt`](requirements.txt).
 
