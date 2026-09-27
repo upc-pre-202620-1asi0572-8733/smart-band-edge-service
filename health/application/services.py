@@ -1,4 +1,4 @@
-"""Application services for the Health bounded context.
+"""Application services for the Health bounded-context.
 
 Application services sit between the interface layer and the domain layer.
 They orchestrate use-cases by coordinating domain services, domain entities,
@@ -6,9 +6,10 @@ and repositories without containing domain logic themselves.
 """
 
 from health.domain.entities import HealthRecord
-from health.domain.services import HealthRecordService
-from health.infrastructure.repositories import HealthRecordRepository
-from iam.infrastructure.repositories import DeviceRepository
+from health.domain.services import HealthRecordService, HealthRecordRepository
+from health.infrastructure.repositories import HealthRecordRepository as HealthRecordRepositoryImpl
+from iam.domain.services import DeviceRepository
+from iam.infrastructure.repositories import DeviceRepository as DeviceRepositoryImpl
 
 
 class HealthRecordApplicationService:
@@ -16,25 +17,28 @@ class HealthRecordApplicationService:
 
     Responsibilities:
 
-    1. Cross-context validation – delegates to the IAM
+    1. Cross-context validation – delegates to the `IAM` bounded-context.
        :class:`~iam.infrastructure.repositories.DeviceRepository` to verify
        that the requesting device is registered and the supplied API key is
        valid.
-    2. Domain logic – delegates to
-       :class:`~health.domain.services.HealthRecordService` to validate the
-       raw sensor values and construct a :class:`~health.domain.entities.HealthRecord`
+    2. Domain logic – delegates to: class:`~health.domain.services.HealthRecordService` to validate
+        the raw sensor values and construct a: class:`~health.domain.entities.HealthRecord`
        entity.
-    3. Persistence – delegates to
-       :class:`~health.infrastructure.repositories.HealthRecordRepository` to
+    3. Persistence – delegates to: class:`~health.infrastructure.repositories.HealthRecordRepository` to
        persist the entity and return the saved aggregate with its assigned
        identity.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        health_record_repository: HealthRecordRepository | None = None,
+        health_record_service: HealthRecordService | None = None,
+        device_repository: DeviceRepository | None = None,
+    ):
         """Initialize the service with its required collaborators."""
-        self.health_record_repository = HealthRecordRepository()
-        self.health_record_service = HealthRecordService()
-        self.device_repository = DeviceRepository()
+        self.health_record_repository = health_record_repository or HealthRecordRepositoryImpl()
+        self.health_record_service = health_record_service or HealthRecordService()
+        self.device_repository = device_repository or DeviceRepositoryImpl()
 
     def create_health_record(self, device_id: str, bpm: float, created_at: str, api_key: str) -> HealthRecord:
         """Execute the *create health record* use-case.
@@ -54,7 +58,7 @@ class HealthRecordApplicationService:
                 to authenticate the device.
 
         Returns:
-            HealthRecord: The persisted :class:`~health.domain.entities.HealthRecord`
+            HealthRecord: The persisted: class:`~health.domain.entities.HealthRecord`
             entity populated with its assigned ``id``.
 
         Raises:
