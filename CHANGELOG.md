@@ -18,6 +18,9 @@ instead of being listed individually.
 
 ### Changed
 
+- Health now uses a DDD anti-corruption layer to translate IAM authentication
+  into its own `SubmittingDevice` concept, removing direct repository and
+  HTTP-helper dependencies across the bounded-context boundary.
 - Application initialization now uses a Flask application factory with
   environment-configured database lifecycle and teardown.
 - Development test-device seeding is opt-in and requires an explicitly

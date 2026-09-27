@@ -6,11 +6,10 @@ JSON responses.  This layer owns no domain logic; it is responsible solely
 for I/O concerns: parsing request data, authentication delegation, and HTTP
 status code selection.
 """
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from health.application.services import HealthRecordApplicationService
-from iam.interfaces.services import authenticate_request
+from health.application.errors import DeviceAuthenticationFailed
 
 health_api = Blueprint("health_api", __name__)
 
@@ -23,11 +22,6 @@ class HealthRecordCreateRequest(BaseModel):
     device_id: str = Field(..., description="Identifier of the submitting device.")
     bpm: float = Field(..., ge=0, le=200, description="Heart-rate reading in beats per minute.")
     created_at: str | None = Field(None, description="ISO 8601 timestamp.")
-
-
-# Module-level singleton; safe because Flask handles one request at a time
-# within a single worker (no shared mutable state on this object).
-health_record_service = HealthRecordApplicationService()
 
 
 @health_api.route("/api/v1/health-monitoring/data-records", methods=["POST"])
@@ -71,19 +65,20 @@ def create_health_record():
         tuple[flask.Response, int]: A JSON response body paired with the
         appropriate HTTP status code.
     """
-    auth_result = authenticate_request()
-    if auth_result:
-        return auth_result
-
     try:
         if not request.is_json:
             return jsonify({"error": "Content-Type must be application/json"}), 415
         request_data = request.get_json(silent=True)
         if request_data is None:
             return jsonify({"error": "Invalid JSON request body"}), 400
+        if isinstance(request_data, dict) and not request_data.get("device_id"):
+            return jsonify({"error": "Missing device_id"}), 401
         req_data = HealthRecordCreateRequest.model_validate(request_data)
-        record = health_record_service.create_health_record(
-            req_data.device_id, req_data.bpm, req_data.created_at, request.headers.get("X-API-Key")
+        api_key = request.headers.get("X-API-Key")
+        if not api_key:
+            return jsonify({"error": "Missing X-API-Key"}), 401
+        record = current_app.extensions["health_record_service"].create_health_record(
+            req_data.device_id, req_data.bpm, req_data.created_at, api_key
         )
         return jsonify({
             "id": record.id,
@@ -93,5 +88,7 @@ def create_health_record():
         }), 201
     except ValidationError:
         return jsonify({"error": "Invalid health record request"}), 400
+    except DeviceAuthenticationFailed:
+        return jsonify({"error": "Invalid device_id or API key"}), 401
     except ValueError:
         return jsonify({"error": "Invalid health record data"}), 400

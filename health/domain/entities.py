@@ -9,6 +9,13 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
+class SubmittingDevice:
+    """Health's local representation of a device allowed to submit records."""
+
+    device_id: str
+
+
+@dataclass(frozen=True)
 class HealthRecord:
     """Aggregate root representing a single health-monitoring reading.
 
@@ -30,4 +37,3 @@ class HealthRecord:
     bpm: float
     created_at: datetime
     id: int | None = None
-

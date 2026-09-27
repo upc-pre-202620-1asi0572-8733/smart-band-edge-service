@@ -54,8 +54,10 @@ Responsible for validating and storing health telemetry.
 - **Core concept**: `HealthRecord`
 - **Primary responsibility**: accept heart-rate readings and persist them
 
-The Health context depends on IAM only for device validation, which keeps the
-telemetry model decoupled from authentication details.
+The Health context delegates device validation through a DDD
+anti-corruption layer. It translates IAM's authentication result into Health's
+`SubmittingDevice` concept, keeping the telemetry model decoupled from IAM's
+repository and credential model.
 
 ## Layered Architecture
 
@@ -84,6 +86,7 @@ smart_band_edge_service/
 │   ├── domain/
 │   ├── application/
 │   ├── infrastructure/
+│   ├── integration/
 │   └── interfaces/
 ├── iam/
 │   ├── domain/

@@ -19,6 +19,10 @@ package "Health Bounded Context" #DEEAFF {
       +__init__(device_id, bpm, created_at, id)
     }
 
+    class SubmittingDevice {
+      device_id: str
+    }
+
     class HealthRecordService {
       +__init__()
       +create_record(device_id, bpm, created_at): HealthRecord
@@ -30,9 +34,17 @@ package "Health Bounded Context" #DEEAFF {
     class HealthRecordApplicationService {
       -health_record_repository: HealthRecordRepository
       -health_record_service: HealthRecordService
-      -device_repository: DeviceRepository
+      -iam_anti_corruption_layer: IamAntiCorruptionLayer
       +__init__()
       +create_health_record(device_id, bpm, created_at, api_key): HealthRecord
+    }
+  }
+
+  ' Context integration
+  package "integration" #DCE8F5 {
+    class IamAntiCorruptionLayer {
+      -iam_authentication_service: AuthApplicationService
+      +authenticated_submitting_device(device_id, credential): SubmittingDevice
     }
   }
 
@@ -132,11 +144,12 @@ class app {
 ' Health bounded context relationships
 HealthRecordApplicationService --> HealthRecordRepository: uses
 HealthRecordApplicationService --> HealthRecordService: uses
-HealthRecordApplicationService --> DeviceRepository: uses
+HealthRecordApplicationService --> IamAntiCorruptionLayer: uses
 HealthRecordRepository --> HealthRecordModel: uses
 HealthRecordRepository ..> HealthRecord: creates
 HealthRecordService ..> HealthRecord: creates
 health_api --> HealthRecordApplicationService: uses
+IamAntiCorruptionLayer ..> SubmittingDevice: translates to
 
 ' IAM bounded context relationships
 AuthApplicationService --> DeviceRepository: uses
@@ -147,8 +160,8 @@ AuthService ..> Device: authenticates
 iam_api --> AuthApplicationService: uses
 
 ' Cross-context relationships
-HealthRecordApplicationService ..> Device: validates
-health_api ..> iam_api: authenticate_request
+IamAntiCorruptionLayer ..> AuthApplicationService: translates IAM result
+app ..> IamAntiCorruptionLayer: composes Health with IAM
 
 ' Database relationships
 HealthRecordModel --> db: uses

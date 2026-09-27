@@ -239,3 +239,40 @@ seeding is controlled explicitly by `SEED_TEST_DEVICE` and
 - Retaining the first-request flag and adding locking around it.
 - Running a separate manual initialization command without application-factory
   integration.
+
+## ADR-0008: Isolate Health from IAM with an anti-corruption adapter
+
+- **Status**: Accepted
+- **Date**: 2026-09-27
+
+### Context
+
+Health needs to confirm that a submitting device is authorized, but directly
+depending on IAM's repository and credential model couples Health use cases to
+another bounded context's internals.
+
+### Decision
+
+Define a Health-owned `SubmittingDevice` domain concept and a Health
+`IamAntiCorruptionLayer` that delegates credential verification to IAM's
+application service. When IAM accepts the credentials, the layer translates
+that result into a `SubmittingDevice`; otherwise it returns no Health device.
+The application factory composes the layer into the Health application
+service. The Health HTTP interface handles Health-owned request and response
+semantics and does not invoke IAM routes or helpers.
+
+### Consequences
+
+- Health application code no longer imports IAM repositories or domain types.
+- IAM implementation details are contained in one anti-corruption layer.
+- The boundary can be replaced with another identity provider without changing
+  Health use cases.
+- Health works with its own domain concept rather than IAM's `Device` model or
+  an IAM-specific authentication result.
+
+### Alternatives considered
+
+- Directly injecting IAM's device repository into the Health service.
+- Calling IAM's HTTP endpoint, adding avoidable network and serialization
+  overhead for an in-process modular monolith.
+- Duplicating credential validation in Health.

@@ -1,9 +1,8 @@
 """Flask application entry point for the Smart Band Edge Service.
 
 This module wires together the Flask application, registers the IAM and
-Health bounded-context Blueprints, and ensures the SQLite database is
-initialized (tables created, a test device seeded) exactly once before the
-first HTTP request is handled.
+Health bounded-context Blueprints, configures the SQLite database, and
+composes the Health-to-IAM anti-corruption layer.
 
 Typical usage::
 
@@ -16,8 +15,10 @@ import os
 
 from flask import Flask
 
-import iam.application.services
+from health.application.services import HealthRecordApplicationService
+from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 from health.interfaces.services import health_api
+from iam.application.services import AuthApplicationService
 from iam.interfaces.services import iam_api
 from shared.infrastructure.database import configure_database, db, init_db
 
@@ -33,12 +34,14 @@ def create_app() -> Flask:
 
     app.register_blueprint(iam_api)
     app.register_blueprint(health_api)
+    app.extensions["health_record_service"] = HealthRecordApplicationService(
+        iam_anti_corruption_layer=IamAntiCorruptionLayer(AuthApplicationService())
+    )
 
     if app.config["SEED_TEST_DEVICE"]:
         if not app.config["TEST_DEVICE_API_KEY"]:
             raise RuntimeError("TEST_DEVICE_API_KEY is required when SEED_TEST_DEVICE=1")
-        auth_application_service = iam.application.services.AuthApplicationService()
-        auth_application_service.get_or_create_test_device(
+        AuthApplicationService().get_or_create_test_device(
             app.config["TEST_DEVICE_ID"],
             app.config["TEST_DEVICE_API_KEY"],
         )

@@ -8,8 +8,8 @@ and repositories without containing domain logic themselves.
 from health.domain.entities import HealthRecord
 from health.domain.services import HealthRecordService, HealthRecordRepository
 from health.infrastructure.repositories import HealthRecordRepository as HealthRecordRepositoryImpl
-from iam.domain.services import DeviceRepository
-from iam.infrastructure.repositories import DeviceRepository as DeviceRepositoryImpl
+from health.application.errors import DeviceAuthenticationFailed
+from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 
 
 class HealthRecordApplicationService:
@@ -17,10 +17,8 @@ class HealthRecordApplicationService:
 
     Responsibilities:
 
-    1. Cross-context validation – delegates to the `IAM` bounded-context.
-       :class:`~iam.infrastructure.repositories.DeviceRepository` to verify
-       that the requesting device is registered and the supplied API key is
-       valid.
+    1. Cross-context validation – delegates IAM translation to the Health
+       :class:`~health.integration.iam_anti_corruption_layer.IamAntiCorruptionLayer`.
     2. Domain logic – delegates to: class:`~health.domain.services.HealthRecordService` to validate
         the raw sensor values and construct a: class:`~health.domain.entities.HealthRecord`
        entity.
@@ -31,14 +29,14 @@ class HealthRecordApplicationService:
 
     def __init__(
         self,
+        iam_anti_corruption_layer: IamAntiCorruptionLayer,
         health_record_repository: HealthRecordRepository | None = None,
         health_record_service: HealthRecordService | None = None,
-        device_repository: DeviceRepository | None = None,
     ):
         """Initialize the service with its required collaborators."""
         self.health_record_repository = health_record_repository or HealthRecordRepositoryImpl()
         self.health_record_service = health_record_service or HealthRecordService()
-        self.device_repository = device_repository or DeviceRepositoryImpl()
+        self.iam_anti_corruption_layer = iam_anti_corruption_layer
 
     def create_health_record(self, device_id: str, bpm: float, created_at: str, api_key: str) -> HealthRecord:
         """Execute the *create health record* use-case.
@@ -66,9 +64,12 @@ class HealthRecordApplicationService:
                 ``api_key`` combination, or if the domain service rejects the
                 sensor values (invalid BPM or malformed timestamp).
         """
-        # Cross-context guard: verify device identity via the IAM repository.
-        if not self.device_repository.find_by_id_and_api_key(device_id, api_key):
-            raise ValueError("Device not found")
-        record = self.health_record_service.create_record(device_id, bpm, created_at)
+        submitting_device = self.iam_anti_corruption_layer.authenticated_submitting_device(
+            device_id, api_key
+        )
+        if submitting_device is None:
+            raise DeviceAuthenticationFailed
+        record = self.health_record_service.create_record(
+            submitting_device.device_id, bpm, created_at
+        )
         return self.health_record_repository.save(record)
-
