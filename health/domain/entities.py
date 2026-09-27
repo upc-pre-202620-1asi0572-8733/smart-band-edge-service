@@ -25,7 +25,7 @@ class HealthRecord:
     """
 
     def __init__(self, device_id: str, bpm: float, created_at: datetime, id: int = None):
-        """Initialise a HealthRecord entity.
+        """Initialize a HealthRecord entity.
 
         Args:
             device_id (str): Identifier of the originating device.
