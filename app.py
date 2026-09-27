@@ -17,6 +17,7 @@ from flask import Flask
 
 from health.application.services import HealthRecordApplicationService
 from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
+from health.infrastructure.repositories import HealthRecordRepository
 from health.interfaces.services import health_api
 from iam.application.services import AuthApplicationService
 from iam.interfaces.services import iam_api
@@ -30,6 +31,7 @@ def create_app() -> Flask:
     configure_database(os.getenv("DATABASE_PATH", "smart_band.db"))
     init_db()
     DeviceRepository().migrate_schema()
+    HealthRecordRepository().migrate_schema()
     app.config["SEED_TEST_DEVICE"] = os.getenv("SEED_TEST_DEVICE", "0") == "1"
     app.config["TEST_DEVICE_ID"] = os.getenv("TEST_DEVICE_ID", "smart-band-001")
     app.config["TEST_DEVICE_API_KEY"] = os.getenv("TEST_DEVICE_API_KEY")

@@ -312,6 +312,43 @@ typed datetimes into the application layer.
 - Relying only on request schema validation, which would not protect other
   record creation paths.
 
+## ADR-0011: Make telemetry retries idempotent with device event IDs
+
+- **Status**: Accepted
+- **Date**: 2026-09-27
+
+### Context
+
+An IoT device may lose the response after the edge service commits a record.
+Retrying a non-idempotent create request can persist duplicate measurements.
+
+### Decision
+
+Require each device to supply a stable `event_id` and scope uniqueness to
+`(device_id, event_id)`. A repeated event with matching BPM and timestamp
+semantics returns the original record with `200 OK`; reusing the ID for
+different telemetry returns `409 Conflict`. A unique database index enforces
+the constraint across requests. An additive migration leaves event IDs null
+for historical rows.
+
+### Consequences
+
+- Devices must persist and reuse event IDs until a submission is acknowledged.
+- Identical retries return the original record without duplicate rows.
+- Reusing an ID with changed input is explicitly rejected.
+- Existing records remain available without assigning fabricated event IDs.
+- Idempotency does not protect data lost before the device durably stores the
+  event ID and payload.
+
+### Alternatives considered
+
+- Time-window deduplication, which can merge distinct readings or miss delayed
+  retries.
+- A separate HTTP idempotency header, which makes the device contract less
+  explicit than a telemetry event identity.
+- Globally unique event IDs, which require unnecessary coordination between
+  independent devices.
+
 ## ADR-0010: Make the IAM device aggregate own credential lifecycle
 
 - **Status**: Accepted

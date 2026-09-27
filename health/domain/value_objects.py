@@ -6,6 +6,21 @@ from math import isfinite
 
 
 @dataclass(frozen=True)
+class TelemetryEventId:
+    """Device-generated identity used to safely retry a telemetry event."""
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.value, str)
+            or not self.value.strip()
+            or len(self.value) > 128
+        ):
+            raise ValueError("Event ID must contain 1 to 128 non-whitespace characters")
+
+
+@dataclass(frozen=True)
 class HeartRateBpm:
     """A finite heart-rate measurement accepted by the Health context."""
 

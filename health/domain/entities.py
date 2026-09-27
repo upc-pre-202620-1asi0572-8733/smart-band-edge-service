@@ -7,7 +7,7 @@ created or mutated through domain services that enforce business invariants.
 from dataclasses import dataclass
 from datetime import datetime
 
-from health.domain.value_objects import HeartRateBpm, RecordedAt
+from health.domain.value_objects import HeartRateBpm, RecordedAt, TelemetryEventId
 
 @dataclass(frozen=True)
 class SubmittingDevice:
@@ -37,17 +37,23 @@ class HealthRecord:
     """
 
     submitting_device: SubmittingDevice
+    event_id: TelemetryEventId
     heart_rate: HeartRateBpm
     recorded_at: RecordedAt
+    timestamp_supplied: bool
     id: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.submitting_device, SubmittingDevice):
             raise TypeError("HealthRecord requires a SubmittingDevice")
+        if not isinstance(self.event_id, TelemetryEventId):
+            raise TypeError("HealthRecord requires a TelemetryEventId")
         if not isinstance(self.heart_rate, HeartRateBpm):
             raise TypeError("HealthRecord requires a HeartRateBpm value")
         if not isinstance(self.recorded_at, RecordedAt):
             raise TypeError("HealthRecord requires a RecordedAt value")
+        if not isinstance(self.timestamp_supplied, bool):
+            raise TypeError("HealthRecord timestamp_supplied must be a boolean")
         if self.id is not None:
             if isinstance(self.id, bool) or not isinstance(self.id, int) or self.id <= 0:
                 raise ValueError("Persisted health record ID must be a positive integer")
@@ -56,14 +62,37 @@ class HealthRecord:
     def record(
         cls,
         submitting_device: SubmittingDevice,
+        event_id: str,
         bpm: float,
         created_at: datetime | None,
     ) -> "HealthRecord":
         """Create a valid health record, enforcing domain invariants."""
         return cls(
             submitting_device,
+            TelemetryEventId(event_id),
             HeartRateBpm(bpm),
             RecordedAt.from_optional(created_at),
+            created_at is not None,
+        )
+
+    @classmethod
+    def reconstitute(
+        cls,
+        submitting_device: SubmittingDevice,
+        event_id: str,
+        bpm: float,
+        created_at: datetime,
+        timestamp_supplied: bool,
+        record_id: int,
+    ) -> "HealthRecord":
+        """Rebuild a persisted record while preserving its original input shape."""
+        return cls(
+            submitting_device,
+            TelemetryEventId(event_id),
+            HeartRateBpm(bpm),
+            RecordedAt(created_at),
+            timestamp_supplied,
+            record_id,
         )
 
     @property
@@ -85,7 +114,9 @@ class HealthRecord:
         """Return this immutable record with its persistence identity."""
         return HealthRecord(
             self.submitting_device,
+            self.event_id,
             self.heart_rate,
             self.recorded_at,
+            self.timestamp_supplied,
             record_id,
         )

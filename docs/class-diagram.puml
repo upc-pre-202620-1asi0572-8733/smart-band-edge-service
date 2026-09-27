@@ -14,9 +14,11 @@ package "Health Bounded Context" #DEEAFF {
     class HealthRecord {
       id: int | None
       submitting_device: SubmittingDevice
+      event_id: TelemetryEventId
       heart_rate: HeartRateBpm
       recorded_at: RecordedAt
-      +record(submitting_device, bpm, created_at): HealthRecord
+      timestamp_supplied: bool
+      +record(submitting_device, event_id, bpm, created_at): HealthRecord
       +with_persistence_id(id): HealthRecord
     }
 
@@ -34,6 +36,11 @@ package "Health Bounded Context" #DEEAFF {
       +__init__(value)
       +now(): RecordedAt
     }
+
+    class TelemetryEventId {
+      value: str
+      +__init__(value)
+    }
   }
 
   ' Application Layer
@@ -42,7 +49,7 @@ package "Health Bounded Context" #DEEAFF {
       -health_record_repository: HealthRecordRepository
       -iam_anti_corruption_layer: IamAntiCorruptionLayer
       +__init__()
-      +create_health_record(device_id, bpm, created_at, api_key): HealthRecord
+      +create_health_record(device_id, event_id, bpm, created_at, api_key): HealthRecordSaveResult
     }
   }
 
@@ -59,12 +66,14 @@ package "Health Bounded Context" #DEEAFF {
     class HealthRecordModel {
       id: AutoField
       device_id: CharField
+      event_id: CharField
       bpm: FloatField
       created_at: DateTimeField
+      timestamp_supplied: BooleanField
     }
 
     class HealthRecordRepository {
-      +save(health_record): HealthRecord
+      +save_idempotently(health_record): HealthRecordSaveResult
     }
   }
 
@@ -165,6 +174,7 @@ HealthRecordRepository --> HealthRecordModel: uses
 HealthRecordRepository ..> HealthRecord: creates
 HealthRecord ..> HeartRateBpm: validates
 HealthRecord ..> RecordedAt: normalizes
+HealthRecord ..> TelemetryEventId: identifies telemetry
 health_api --> HealthRecordApplicationService: uses
 IamAntiCorruptionLayer ..> SubmittingDevice: translates to
 

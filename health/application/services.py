@@ -9,7 +9,7 @@ from datetime import datetime
 
 from health.application.errors import DeviceAuthenticationFailed
 from health.domain.entities import HealthRecord, SubmittingDevice
-from health.domain.repositories import HealthRecordRepository
+from health.domain.repositories import HealthRecordRepository, HealthRecordSaveResult
 from health.infrastructure.repositories import HealthRecordRepository as HealthRecordRepositoryImpl
 from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 
@@ -38,14 +38,18 @@ class HealthRecordApplicationService:
         self.iam_anti_corruption_layer = iam_anti_corruption_layer
 
     def create_health_record(
-        self, device_id: str, bpm: float, created_at: datetime | None, api_key: str
-    ) -> HealthRecord:
+        self,
+        device_id: str,
+        event_id: str,
+        bpm: float,
+        created_at: datetime | None,
+        api_key: str,
+    ) -> HealthRecordSaveResult:
         """Execute the *create health record* use-case.
 
         Validates that the device identified by ``device_id`` is registered
         and that the supplied ``api_key`` matches the stored credential before
-        delegating record creation to the domain service and persisting the
-        result.
+        creating and idempotently persisting the domain record.
 
         Args:
             device_id (str): Identifier of the device submitting the reading.
@@ -57,8 +61,8 @@ class HealthRecordApplicationService:
                 to authenticate the device.
 
         Returns:
-            HealthRecord: The persisted: class:`~health.domain.entities.HealthRecord`
-            entity populated with its assigned ``id``.
+            HealthRecordSaveResult: The persisted record and whether it was
+            newly created or was an identical retry.
 
         Raises:
             DeviceAuthenticationFailed: If the credentials are not accepted.
@@ -70,6 +74,6 @@ class HealthRecordApplicationService:
         if submitting_device is None:
             raise DeviceAuthenticationFailed
         record = HealthRecord.record(
-            SubmittingDevice(submitting_device.device_id), bpm, created_at
+            SubmittingDevice(submitting_device.device_id), event_id, bpm, created_at
         )
-        return self.health_record_repository.save(record)
+        return self.health_record_repository.save_idempotently(record)

@@ -18,6 +18,10 @@ instead of being listed individually.
 
 ### Changed
 
+- Health ingestion now requires device-scoped event IDs, returns the original
+  record for identical retries, and rejects conflicting reuse with `409`.
+- Existing Health databases receive an additive event-ID migration and unique
+  `(device_id, event_id)` index; historical records keep a null event ID.
 - Health records now enforce BPM, device identity, and UTC timestamp invariants
   through domain value objects and a domain-owned record factory.
 - IAM devices now own authentication, credential rotation, and revocation

@@ -18,7 +18,7 @@ from pathlib import Path
 from peewee import SqliteDatabase
 
 # Shared SQLite database instance used by all bounded-context ORM models.
-db = SqliteDatabase(None)
+db = SqliteDatabase(None, timeout=30, pragmas={"busy_timeout": 30_000})
 
 
 def configure_database(database_path: str) -> None:

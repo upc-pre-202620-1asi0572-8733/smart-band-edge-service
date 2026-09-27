@@ -197,6 +197,7 @@ Creates a new heart-rate record for an authenticated device.
 ```json
 {
   "device_id": "smart-band-001",
+  "event_id": "band-001-000042",
   "bpm": 72.5,
   "created_at": "2025-06-04T18:23:00-05:00"
 }
@@ -205,6 +206,8 @@ Creates a new heart-rate record for an authenticated device.
 #### Request fields
 
 - `device_id` (`string`, required): unique device identifier
+- `event_id` (`string`, required): stable device-generated event identity,
+  reused unchanged when retrying the same reading; unique per device
 - `bpm` (`number`, required): heart rate in beats per minute
 - `created_at` (`string`, optional): ISO 8601 timestamp; when omitted, the
   service uses the current UTC time
@@ -217,6 +220,7 @@ curl -X POST http://127.0.0.1:5000/api/v1/health-monitoring/data-records \
   -H 'X-API-Key: test-api-key-123' \
   -d '{
 	"device_id": "smart-band-001",
+	"event_id": "band-001-000042",
 	"bpm": 72.5,
 	"created_at": "2025-06-04T18:23:00-05:00"
   }'
@@ -226,10 +230,15 @@ curl -X POST http://127.0.0.1:5000/api/v1/health-monitoring/data-records \
 
 `201 Created`
 
+The first accepted submission returns `201 Created`. An identical retry
+returns `200 OK` with the original record and ID. Reusing the same event ID
+with different telemetry returns `409 Conflict`.
+
 ```json
 {
   "id": 1,
   "device_id": "smart-band-001",
+  "event_id": "band-001-000042",
   "bpm": 72.5,
   "created_at": "2025-06-04T23:23:00+00:00Z"
 }
@@ -245,6 +254,8 @@ curl -X POST http://127.0.0.1:5000/api/v1/health-monitoring/data-records \
   - missing `device_id`
   - missing `X-API-Key`
   - invalid device/API key pair
+- `409 Conflict`
+  - event ID already used for different telemetry
 
 ## Operational Notes for IoT Projects
 
@@ -259,7 +270,11 @@ When adapting this service for a real IoT solution, consider the following:
 - **Observability**: add structured logging, trace correlation, and a proper
   health check endpoint before production use.
 - **Device contracts**: version telemetry payloads carefully so device firmware
-  and server-side ingestion remain compatible.
+  and server-side ingestion remain compatible. Each device must persist a
+  stable event ID and reuse it on retries.
+- **Delivery reliability**: persist a stable event ID on the device before
+  transmission and reuse it for every retry until the edge service confirms
+  acceptance.
 - **Startup lifecycle**: move bootstrap logic out of `before_request` if you
   need deterministic initialization during container startup.
 

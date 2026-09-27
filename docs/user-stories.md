@@ -30,6 +30,20 @@ Acceptance criteria:
   - When the edge service validates and persists the health record
   - Then the edge service returns a response with status `201 Created`
   - And the response includes the created record with `id`, `device_id`, `bpm`, and `created_at`
+  - And the record includes the submitted device-generated `event_id`
+
+- Scenario: Retry the same telemetry after an uncertain delivery
+  - Given a device submits a valid record with a stable `event_id`
+  - And the device does not receive the original response
+  - When the device resubmits the same event ID and telemetry
+  - Then the edge service returns the original record with status `200 OK`
+  - And the edge service does not create a duplicate record
+
+- Scenario: Reuse an event ID for different telemetry
+  - Given a device has already submitted a record with an `event_id`
+  - When the device submits different telemetry using that same event ID
+  - Then the edge service returns `409 Conflict`
+  - And the original record remains unchanged
 
 - Scenario: Missing required fields
   - Given a smart-band device submits a `POST` request to `/api/v1/health-monitoring/data-records`
@@ -136,7 +150,6 @@ Acceptance criteria:
   - When another request is received
   - Then the edge service does not run initialization again
   - And request handling proceeds without repeating bootstrap operations
-
 
 
 

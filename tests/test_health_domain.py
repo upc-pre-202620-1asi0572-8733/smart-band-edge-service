@@ -2,7 +2,7 @@ import unittest
 from datetime import UTC, datetime, timedelta
 
 from health.domain.entities import HealthRecord, SubmittingDevice
-from health.domain.value_objects import HeartRateBpm, RecordedAt
+from health.domain.value_objects import HeartRateBpm, RecordedAt, TelemetryEventId
 
 
 class HeartRateBpmTestCase(unittest.TestCase):
@@ -15,6 +15,14 @@ class HeartRateBpmTestCase(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(ValueError):
                     HeartRateBpm(value)
+
+
+class TelemetryEventIdTestCase(unittest.TestCase):
+    def test_rejects_empty_and_overlong_event_ids(self):
+        for event_id in ("", "  ", "x" * 129):
+            with self.subTest(event_id=event_id):
+                with self.assertRaises(ValueError):
+                    TelemetryEventId(event_id)
 
 
 class RecordedAtTestCase(unittest.TestCase):
@@ -32,13 +40,22 @@ class HealthRecordTestCase(unittest.TestCase):
     def test_factory_creates_record_with_domain_values(self):
         source_time = datetime.fromisoformat("2026-09-27T15:00:00-05:00")
         record = HealthRecord.record(
-            SubmittingDevice("smart-band-001"), 72, source_time
+            SubmittingDevice("smart-band-001"), "event-42", 72, source_time
         )
 
         self.assertEqual(record.bpm, 72.0)
         self.assertEqual(record.created_at.isoformat(), "2026-09-27T20:00:00+00:00")
+        self.assertTrue(record.timestamp_supplied)
         self.assertIsNone(record.id)
         self.assertEqual(record.with_persistence_id(1).id, 1)
+
+    def test_omitted_timestamp_is_marked_as_service_generated(self):
+        record = HealthRecord.record(
+            SubmittingDevice("smart-band-001"), "event-43", 72, None
+        )
+
+        self.assertFalse(record.timestamp_supplied)
+        self.assertEqual(record.created_at.utcoffset(), timedelta(0))
 
     def test_rejects_invalid_direct_aggregate_construction(self):
         with self.assertRaises(TypeError):
