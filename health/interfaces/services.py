@@ -1,4 +1,4 @@
-"""Interface (REST API) layer for the Health bounded context.
+"""Interface (REST API) layer for the Health bounded-context.
 
 Exposes a Flask Blueprint (``health_api``) that translates incoming HTTP
 requests into calls to the application service and maps the results back to
@@ -7,11 +7,21 @@ for I/O concerns: parsing request data, authentication delegation, and HTTP
 status code selection.
 """
 from flask import Blueprint, request, jsonify
+from pydantic import BaseModel, Field, ValidationError
 
 from health.application.services import HealthRecordApplicationService
 from iam.interfaces.services import authenticate_request
 
 health_api = Blueprint("health_api", __name__)
+
+
+class HealthRecordCreateRequest(BaseModel):
+    """Pydantic model for validating the create health record request body."""
+
+    device_id: str = Field(..., description="Identifier of the submitting device.")
+    bpm: float = Field(..., ge=0, le=200, description="Heart-rate reading in beats per minute.")
+    created_at: str | None = Field(None, description="ISO 8601 timestamp.")
+
 
 # Module-level singleton; safe because Flask handles one request at a time
 # within a single worker (no shared mutable state on this object).
@@ -50,8 +60,8 @@ def create_health_record():
 
     - ``201 Created`` – Record saved successfully.  Body contains the
       persisted record with its assigned ``id`` and a UTC ``created_at``.
-    - ``400 Bad Request`` – A required field is missing or a value is
-      invalid (e.g. BPM out of range, malformed timestamp).
+    - ``400 Bad Request`` – A required field is missing, or a value is
+      invalid (i.e., BPM out of range, malformed timestamp).
     - ``401 Unauthorized`` – ``device_id`` or ``X-API-Key`` is absent or
       does not match a registered device.
 
@@ -63,13 +73,10 @@ def create_health_record():
     if auth_result:
         return auth_result
 
-    data = request.json
     try:
-        device_id = data["device_id"]
-        bpm = data["bpm"]
-        created_at = data.get("created_at")
+        req_data = HealthRecordCreateRequest.model_validate(request.json)
         record = health_record_service.create_health_record(
-            device_id, bpm, created_at, request.headers.get("X-API-Key")
+            req_data.device_id, req_data.bpm, req_data.created_at, request.headers.get("X-API-Key")
         )
         return jsonify({
             "id": record.id,
@@ -77,8 +84,6 @@ def create_health_record():
             "bpm": record.bpm,
             "created_at": record.created_at.isoformat() + "Z"
         }), 201
-    except KeyError:
-        return jsonify({"error": "Missing required fields"}), 400
-    except ValueError as e:
+    except (ValidationError, ValueError) as e:
         return jsonify({"error": str(e)}), 400
 
