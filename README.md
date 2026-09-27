@@ -268,3 +268,18 @@ Additional documentation is available in [`docs/`](docs):
 
 This project is licensed under the MIT License. See [`LICENSE.md`](LICENSE.md)
 for details.
+
+## Improvements Made
+
+The codebase has been modernized with the following improvements:
+
+1.  **Modern Python Features**:
+    *   **Immutability**: Domain entities (`Device`, `HealthRecord`) now use `@dataclass(frozen=True)` to ensure state consistency and prevent accidental modification outside domain services.
+    *   **Type Hinting**: Consistent use of modern type hints (e.g., `str | None` instead of `Optional[str]`) and `datetime.UTC`.
+2.  **Clean Architecture & DDD**:
+    *   **Repository Protocols**: Introduced `Protocol` based interfaces for repositories in the domain layer. This decouples the domain from infrastructure (Peewee) and enables easier testing via dependency injection.
+    *   **Dependency Injection**: Application services now accept repository interfaces in their constructors, allowing for easier mocking and better testability.
+3.  **Robust Data Validation**:
+    *   **Pydantic Integration**: Introduced Pydantic for request validation in the interface layer. This provides automatic type checking, range validation (e.g., BPM between 0 and 200), and clearer error messages.
+4.  **Dependencies**: Updated `requirements.txt` to include `pydantic` and ensure latest compatible versions of other libraries.
+5.  **Refactoring**: Converted repository methods from `@staticmethod` to instance methods to align with modern OOP practices and DI patterns.
