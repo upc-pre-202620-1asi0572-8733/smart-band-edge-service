@@ -8,3 +8,5 @@ __pycache__/
 smart_band.db
 var/
 /.idea/
+# macOS Finder metadata
+.DS_Store
