@@ -1,60 +1,83 @@
 """Application services for the IAM bounded context.
 
-Application services orchestrate use-cases by coordinating domain objects and
-repositories.  They contain no domain logic themselves; all business rules live
-in the domain layer.
+Application services coordinate IAM use cases by loading and persisting
+aggregates and invoking their domain behavior. Domain invariants remain
+encapsulated by those aggregates and value objects.
 """
-from typing import Optional
-
 from iam.domain.entities import Device
-from iam.domain.services import AuthService
-from iam.infrastructure.repositories import DeviceRepository
+from iam.domain.repositories import DeviceRepository
+from iam.infrastructure.repositories import DeviceRepository as DeviceRepositoryImpl
 
 
 class AuthApplicationService:
-    """Application service that orchestrates device-authentication use-cases.
+    """Application service coordinating IAM device lifecycle use cases."""
 
-    Coordinates the :class:`~iam.infrastructure.repositories.DeviceRepository`
-    (for reading device credentials) and the
-    :class:`~iam.domain.services.AuthService` (for applying the authentication
-    business rule).
-    """
-
-    def __init__(self):
+    def __init__(
+        self,
+        device_repository: DeviceRepository | None = None,
+    ):
         """Initialise the service with its required collaborators."""
-        self.device_repository = DeviceRepository()
-        self.auth_service = AuthService()
+        self.device_repository = device_repository or DeviceRepositoryImpl()
 
     def authenticate(self, device_id: str, api_key: str) -> bool:
-        """Authenticate a device by its ID and API key.
+        """Check credentials against the identified device's access state.
 
-        Looks up the device in the repository using the supplied credentials.
-        The domain service then evaluates whether the result constitutes a
-        successful authentication.
+        A credential is accepted only when the device exists, is not revoked,
+        and its stored verifier matches the presented API key.
 
         Args:
-            device_id (str): Unique identifier of the device (e.g.
-                ``'smart-band-001'``).
-            api_key (str): The secret API key paired with the device,
-                typically provided in the ``X-API-Key`` request header.
+            device_id: Unique identity of the device.
+            api_key: Secret credential presented for authentication.
 
         Returns:
-            bool: ``True`` if a device with the given ``device_id`` and
-            ``api_key`` exists in the repository; ``False`` otherwise.
+            ``True`` if the device exists, is active, and accepts the
+            credential; otherwise ``False``.
         """
-        device: Optional[Device] = self.device_repository.find_by_id_and_api_key(device_id, api_key)
-        return self.auth_service.authenticate(device)
+        device = self.device_repository.find_by_device_id(device_id)
+        return device is not None and device.authenticate(api_key)
 
-    def get_or_create_test_device(self) -> Device:
+    def register_device(self, device_id: str, api_key: str) -> Device:
+        """Register a device and persist its aggregate with a protected credential.
+
+        Raises:
+            ValueError: A device with this identity is already registered, or
+                the domain rejects the identity or credential.
+        """
+        if self.device_repository.find_by_device_id(device_id) is not None:
+            raise ValueError("Device is already registered")
+        return self.device_repository.save(Device.register(device_id, api_key))
+
+    def revoke_device(self, device_id: str) -> Device:
+        """Revoke and persist an active device.
+
+        Raises:
+            ValueError: The device does not exist or its aggregate cannot be
+                revoked again.
+        """
+        device = self.device_repository.find_by_device_id(device_id)
+        if device is None:
+            raise ValueError("Device not found")
+        return self.device_repository.save(device.revoke())
+
+    def rotate_api_key(self, device_id: str, new_api_key: str) -> Device:
+        """Replace and persist an active device's API-key verifier.
+
+        Raises:
+            ValueError: The device does not exist, is revoked, or the new
+                credential is invalid.
+        """
+        device = self.device_repository.find_by_device_id(device_id)
+        if device is None:
+            raise ValueError("Device not found")
+        return self.device_repository.save(device.rotate_api_key(new_api_key))
+
+    def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
         """Retrieve the default test device, creating it if it does not exist.
 
-        Intended for development and local testing only.  Delegates to the
-        repository to perform an idempotent ``get_or_create`` operation against
-        the ``devices`` table.
+        Intended only for development and local testing. The repository
+        persists a newly registered aggregate when no matching device exists.
 
         Returns:
-            Device: The :class:`~iam.domain.entities.Device` entity for the
-            pre-configured test device (``device_id='smart-band-001'``).
+            The matching :class:`~iam.domain.entities.Device` aggregate.
         """
-        return self.device_repository.get_or_create_test_device()
-
+        return self.device_repository.get_or_create_test_device(device_id, api_key)

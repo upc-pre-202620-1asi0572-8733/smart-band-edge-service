@@ -1,70 +1,76 @@
-"""Application services for the Health bounded context.
+"""Application services for the Health bounded-context.
 
-Application services sit between the interface layer and the domain layer.
-They orchestrate use-cases by coordinating domain services, domain entities,
-and repositories without containing domain logic themselves.
+Application services coordinate Health use cases: they invoke domain
+behavior, coordinate with other bounded contexts through integration
+components, and persist outcomes through repositories.
 """
 
-from health.domain.entities import HealthRecord
-from health.domain.services import HealthRecordService
-from health.infrastructure.repositories import HealthRecordRepository
-from iam.infrastructure.repositories import DeviceRepository
+from datetime import datetime
+
+from health.application.errors import DeviceAuthenticationFailed
+from health.domain.entities import HealthRecord, SubmittingDevice
+from health.domain.repositories import HealthRecordRepository, HealthRecordSaveResult
+from health.infrastructure.repositories import HealthRecordRepository as HealthRecordRepositoryImpl
+from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 
 
 class HealthRecordApplicationService:
-    """Application service that orchestrates the *create health record* use-case.
+    """Coordinate the use case for accepting a health telemetry event.
 
-    Responsibilities:
-
-    1. Cross-context validation – delegates to the IAM
-       :class:`~iam.infrastructure.repositories.DeviceRepository` to verify
-       that the requesting device is registered and the supplied API key is
-       valid.
-    2. Domain logic – delegates to
-       :class:`~health.domain.services.HealthRecordService` to validate the
-       raw sensor values and construct a :class:`~health.domain.entities.HealthRecord`
-       entity.
-    3. Persistence – delegates to
-       :class:`~health.infrastructure.repositories.HealthRecordRepository` to
-       persist the entity and return the saved aggregate with its assigned
-       identity.
+    The service asks the Health-to-IAM anti-corruption layer to authenticate
+    the submitting device, creates a valid
+    :class:`~health.domain.entities.HealthRecord` through aggregate behavior,
+    and delegates idempotent persistence to the Health repository.
     """
 
-    def __init__(self):
-        """Initialize the service with its required collaborators."""
-        self.health_record_repository = HealthRecordRepository()
-        self.health_record_service = HealthRecordService()
-        self.device_repository = DeviceRepository()
+    def __init__(
+        self,
+        iam_anti_corruption_layer: IamAntiCorruptionLayer,
+        health_record_repository: HealthRecordRepository | None = None,
+    ):
+        """Initialize the service with its context integration and repository."""
+        self.health_record_repository = health_record_repository or HealthRecordRepositoryImpl()
+        self.iam_anti_corruption_layer = iam_anti_corruption_layer
 
-    def create_health_record(self, device_id: str, bpm: float, created_at: str, api_key: str) -> HealthRecord:
-        """Execute the *create health record* use-case.
+    def create_health_record(
+        self,
+        device_id: str,
+        event_id: str,
+        bpm: float,
+        created_at: datetime | None,
+        api_key: str,
+    ) -> HealthRecordSaveResult:
+        """Accept and persist one device-submitted telemetry event.
 
-        Validates that the device identified by ``device_id`` is registered
-        and that the supplied ``api_key`` matches the stored credential before
-        delegating record creation to the domain service and persisting the
-        result.
+        Authentication is delegated to the IAM anti-corruption layer. Health
+        then creates the record through its aggregate and persists it
+        idempotently, distinguishing a new event from an identical retry.
 
         Args:
-            device_id (str): Identifier of the device submitting the reading.
-            bpm (float): Heart-rate measurement in beats per minute.
-            created_at (str): ISO 8601 timestamp of the reading.  Passed
-                directly to the domain service, which also accepts ``None``
-                to default to the current UTC time.
-            api_key (str): The value of the ``X-API-Key`` request header used
-                to authenticate the device.
+            device_id: Identity of the device submitting the reading.
+            event_id: Stable device-generated identity reused for retries.
+            bpm: Heart-rate measurement in beats per minute.
+            created_at: Parsed observation time, or ``None`` to use the
+                current UTC time.
+            api_key: Credential presented for device authentication.
 
         Returns:
-            HealthRecord: The persisted :class:`~health.domain.entities.HealthRecord`
-            entity populated with its assigned ``id``.
+            The persisted record and whether it was newly created or an
+            identical retry.
 
         Raises:
-            ValueError: If no device matches the given ``device_id`` /
-                ``api_key`` combination, or if the domain service rejects the
-                sensor values (invalid BPM or malformed timestamp).
+            DeviceAuthenticationFailed: The IAM context rejects the device's
+                credentials.
+            ValueError: The Health domain rejects a value or invariant.
+            :class:`~health.domain.errors.TelemetryEventConflict`: The device
+                reused an event ID for different telemetry.
         """
-        # Cross-context guard: verify device identity via the IAM repository.
-        if not self.device_repository.find_by_id_and_api_key(device_id, api_key):
-            raise ValueError("Device not found")
-        record = self.health_record_service.create_record(device_id, bpm, created_at)
-        return self.health_record_repository.save(record)
-
+        submitting_device = self.iam_anti_corruption_layer.authenticated_submitting_device(
+            device_id, api_key
+        )
+        if submitting_device is None:
+            raise DeviceAuthenticationFailed
+        record = HealthRecord.record(
+            SubmittingDevice(submitting_device.device_id), event_id, bpm, created_at
+        )
+        return self.health_record_repository.save_idempotently(record)

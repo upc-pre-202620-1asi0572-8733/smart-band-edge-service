@@ -1,39 +1,68 @@
-"""Domain entities for the IAM bounded context.
+"""IAM aggregate roots."""
 
-This module defines the aggregate root for the IAM bounded context.
-Entities carry identity across their lifetime and encapsulate state that
-is only modified by domain services enforcing business invariants.
-"""
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+
+from iam.domain.credentials import ApiCredential
 
 
+@dataclass(frozen=True)
 class Device:
-    """Aggregate root representing a registered smart band device.
+    """Registered device aggregate with credential and access lifecycle rules."""
 
-    A ``Device`` is the core identity object in the IAM bounded context.
-    It is identified by a unique ``device_id`` and authenticated via its
-    paired ``api_key``.  Device registration (creation) and look-up are
-    managed by the :class:`~iam.infrastructure.repositories.DeviceRepository`.
+    device_id: str
+    credential: ApiCredential
+    created_at: datetime
+    revoked_at: datetime | None = None
 
-    Attributes:
-        device_id (str): Immutable, unique identifier for the device
-            (e.g. ``'smart-band-001'``).
-        api_key (str): Secret key used to authenticate HTTP requests
-            originating from this device.  Transmitted via the
-            ``X-API-Key`` header.
-        created_at (datetime): UTC timestamp recording when the device was
-            first registered in the system.
-    """
+    def __post_init__(self) -> None:
+        if not isinstance(self.device_id, str) or not self.device_id.strip():
+            raise ValueError("Device identifier cannot be empty")
+        if not isinstance(self.credential, ApiCredential):
+            raise TypeError("Device requires an API credential verifier")
+        if not isinstance(self.created_at, datetime):
+            raise TypeError("Device creation time must be a datetime")
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
+            raise ValueError("Device creation time must include a timezone")
+        object.__setattr__(self, "created_at", self.created_at.astimezone(UTC))
+        if self.revoked_at is not None:
+            if not isinstance(self.revoked_at, datetime):
+                raise TypeError("Revocation time must be a datetime")
+            if self.revoked_at.tzinfo is None or self.revoked_at.utcoffset() is None:
+                raise ValueError("Revocation time must include a timezone")
+            object.__setattr__(self, "revoked_at", self.revoked_at.astimezone(UTC))
+            if self.revoked_at < self.created_at:
+                raise ValueError("Revocation cannot predate device registration")
 
-    def __init__(self, device_id: str, api_key: str, created_at: datetime):
-        """Initialise a Device aggregate root.
+    @classmethod
+    def register(
+        cls,
+        device_id: str,
+        api_key: str,
+        created_at: datetime | None = None,
+    ) -> "Device":
+        """Register a device and protect its API key with a one-way verifier."""
+        return cls(
+            device_id,
+            ApiCredential.create(api_key),
+            created_at or datetime.now(UTC),
+        )
 
-        Args:
-            device_id (str): Unique identifier for the device.
-            api_key (str): Secret API key used for request authentication.
-            created_at (datetime): UTC timestamp of device registration.
-        """
-        self.device_id = device_id
-        self.api_key = api_key
-        self.created_at = created_at
+    def authenticate(self, api_key: str) -> bool:
+        """Accept credentials only while this device is active."""
+        return self.revoked_at is None and self.credential.matches(api_key)
 
+    def revoke(self, at: datetime | None = None) -> "Device":
+        """Return a revoked device; a revoked device cannot be revoked twice."""
+        if self.revoked_at is not None:
+            raise ValueError("Device is already revoked")
+        revoked_at = at or datetime.now(UTC)
+        if revoked_at.tzinfo is None or revoked_at.utcoffset() is None:
+            raise ValueError("Revocation time must include a timezone")
+        return replace(self, revoked_at=revoked_at)
+
+    def rotate_api_key(self, new_api_key: str) -> "Device":
+        """Return an active device with a newly protected API key."""
+        if self.revoked_at is not None:
+            raise ValueError("Cannot rotate credentials for a revoked device")
+        return replace(self, credential=ApiCredential.create(new_api_key))
