@@ -8,7 +8,7 @@ for published releases. Changes are grouped by user-visible or
 maintainer-relevant impact; implementation-only commits are consolidated
 instead of being listed individually.
 
-## [Unreleased]
+## [1.0.0] - 2026-09-27
 
 ### Added
 
