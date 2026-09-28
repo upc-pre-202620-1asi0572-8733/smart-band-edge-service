@@ -46,6 +46,81 @@ class IamAntiCorruptionLayerTestCase(unittest.TestCase):
         self.assertIsNone(layer.authenticated_submitting_device("band-42", "invalid"))
 
 
+class IamApiTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.app.testing = True
+
+    def setUp(self):
+        self.client = self.app.test_client()
+
+    def test_authenticates_registered_device(self):
+        response = self.client.post(
+            "/api/v1/iam/authentications",
+            json={"device_id": "smart-band-001"},
+            headers={"X-API-Key": "test-only-key"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json,
+            {"device_id": "smart-band-001", "authenticated": True},
+        )
+
+    def test_rejects_invalid_device_credentials(self):
+        for device_id, api_key in (
+            ("smart-band-001", "invalid-key"),
+            ("unknown-device", "invalid-key"),
+        ):
+            with self.subTest(device_id=device_id):
+                response = self.client.post(
+                    "/api/v1/iam/authentications",
+                    json={"device_id": device_id},
+                    headers={"X-API-Key": api_key},
+                )
+                self.assertEqual(response.status_code, 401)
+
+    def test_rejects_missing_api_key(self):
+        response = self.client.post(
+            "/api/v1/iam/authentications",
+            json={"device_id": "smart-band-001"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json, {"error": "Missing X-API-Key"})
+
+    def test_rejects_malformed_or_extra_request_fields(self):
+        for body in ({}, {"device_id": "smart-band-001", "bpm": 70}):
+            with self.subTest(body=body):
+                response = self.client.post(
+                    "/api/v1/iam/authentications",
+                    json=body,
+                    headers={"X-API-Key": "test-only-key"},
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_rejects_non_json_authentication_request(self):
+        response = self.client.post(
+            "/api/v1/iam/authentications",
+            data="{}",
+            content_type="text/plain",
+            headers={"X-API-Key": "test-only-key"},
+        )
+
+        self.assertEqual(response.status_code, 415)
+
+    def test_rejects_malformed_json(self):
+        response = self.client.post(
+            "/api/v1/iam/authentications",
+            data="{",
+            content_type="application/json",
+            headers={"X-API-Key": "test-only-key"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+
 class HealthApiTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

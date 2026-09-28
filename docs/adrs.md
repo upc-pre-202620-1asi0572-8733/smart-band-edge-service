@@ -101,13 +101,17 @@ devices before accepting telemetry.
 
 Require the device identifier in the JSON request body and its paired secret
 in the `X-API-Key` header. IAM validates the pair against the registered
-device repository. Protected routes call the shared authentication helper
-before executing their use case.
+device repository. IAM exposes a focused HTTP authentication endpoint for
+clients that need an IAM response; other in-process bounded contexts call the
+IAM application use case through their own integration components. Device
+registration, credential rotation, and revocation are not exposed as HTTP
+operations.
 
 ### Consequences
 
 - Device-to-service integration is simple and explicit.
-- Authentication can be reused by additional bounded-context endpoints.
+- Authentication behavior is shared through the IAM application use case,
+  while HTTP adapters remain independent of in-process integration.
 - API keys must be provisioned, rotated, stored, and transmitted securely.
 - The seeded development credential is not suitable for production.
 

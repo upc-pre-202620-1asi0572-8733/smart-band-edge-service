@@ -194,6 +194,41 @@ To enable development test-device seeding, set `SEED_TEST_DEVICE=true` and
 
 ## API Contract
 
+### Authenticate a device
+
+`POST /api/v1/iam/authentications`
+
+Checks that the device is registered, active, and presents its matching API
+key. This endpoint only reports authentication outcome; device registration,
+credential rotation, and revocation are not exposed over HTTP.
+
+#### Required headers
+
+- `Content-Type: application/json`
+- `X-API-Key: <device api key>`
+
+#### Request body
+
+```json
+{
+  "device_id": "smart-band-001"
+}
+```
+
+#### Responses
+
+- `200 OK`: credentials are valid; response includes `device_id` and
+  `"authenticated": true`.
+- `400 Bad Request`: invalid JSON shape or unexpected fields.
+- `401 Unauthorized`: missing or invalid API key, or unknown/revoked device.
+- `415 Unsupported Media Type`: request is not JSON.
+
+Use HTTPS for production traffic so device credentials are encrypted in
+transit.
+
+Health's telemetry endpoint authenticates through the IAM application use case
+inside the service; it does not make an HTTP call to this endpoint.
+
 ### Create a health record
 
 `POST /api/v1/health-monitoring/data-records`

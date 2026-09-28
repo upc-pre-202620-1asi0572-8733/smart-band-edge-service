@@ -1,53 +1,38 @@
-"""Interface (REST API) layer for the IAM bounded context.
+"""HTTP interface for the IAM bounded context.
 
-Exposes IAM HTTP routes and adapts request data for the IAM application
-service. ``authenticate_request`` is an HTTP helper for route handlers; other
-bounded contexts use IAM's application use case through their own integration
-components instead of depending on this interface.
+Exposes IAM HTTP routes and adapts request data for IAM application use cases.
 """
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
-from iam.application.services import AuthApplicationService
 
 iam_api = Blueprint("iam_api", __name__)
 
 
 class AuthRequest(BaseModel):
-    """Pydantic model for validating the authentication request data."""
+    """Request contract for authenticating one registered device."""
 
-    # Ignore additional payload fields outside IAM's authentication contract.
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    device_id: str | None = Field(None, description="Identifier of the device.")
-
-
-# Module-level singleton — instantiated once per worker process.
-auth_service = AuthApplicationService()
+    device_id: str = Field(..., min_length=1, description="Identifier of the device.")
 
 
-def authenticate_request() -> tuple | None:
-    """Authenticate the device described by the current HTTP request.
+@iam_api.route("/api/v1/iam/authentications", methods=["POST"])
+def authenticate_device():
+    """Authenticate a device using its identity and API key.
 
-    Extracts ``device_id`` from the JSON request body and ``X-API-Key`` from
-    the request headers, validates the HTTP payload, then delegates
-    authentication to IAM's application service. This helper belongs to the
-    HTTP interface and is not the contract for communication between
-    bounded contexts.
+    The device identity is supplied in the JSON body and its API key in the
+    ``X-API-Key`` header. This endpoint reports authentication outcome only;
+    device provisioning and lifecycle management are not exposed over HTTP.
 
-    **Expected request contract:**
+    Responses:
+        ``200`` when the registered device is active and the credential
+        matches; ``400`` for invalid JSON or a malformed payload; ``401`` for
+        missing or rejected credentials; ``415`` for a non-JSON request.
 
-    - ``Content-Type: application/json`` with a body containing ``device_id``.
-    - ``X-API-Key`` header carrying the device's secret API key.
-
-    Returns:
-        An HTTP error response and status code when the request is malformed
-        or authentication fails; ``None`` when authentication succeeds.
+    The IAM application use case is obtained from the Flask application
+    composition, so HTTP requests use the same service instance as other
+    adapters.
     """
-    api_key = request.headers.get("X-API-Key")
-    if not api_key:
-        return jsonify({"error": "Missing X-API-Key"}), 401
-
     if not request.is_json:
         return jsonify({"error": "Content-Type must be application/json"}), 415
 
@@ -56,13 +41,17 @@ def authenticate_request() -> tuple | None:
         return jsonify({"error": "Invalid JSON request body"}), 400
 
     try:
-        device_id = AuthRequest.model_validate(request_data).device_id
+        auth_request = AuthRequest.model_validate(request_data)
     except ValidationError:
-        return jsonify({"error": "Invalid request body"}), 400
+        return jsonify({"error": "Invalid authentication request"}), 400
 
-    if not device_id:
-        return jsonify({"error": "Missing device_id"}), 401
+    api_key = request.headers.get("X-API-Key")
+    if not api_key:
+        return jsonify({"error": "Missing X-API-Key"}), 401
 
-    if not auth_service.authenticate(device_id, api_key):
+    if not current_app.extensions["iam_authentication_service"].authenticate(
+        auth_request.device_id, api_key
+    ):
         return jsonify({"error": "Invalid device_id or API key"}), 401
-    return None
+
+    return jsonify({"device_id": auth_request.device_id, "authenticated": True}), 200

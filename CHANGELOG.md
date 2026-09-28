@@ -12,6 +12,8 @@ instead of being listed individually.
 
 ### Added
 
+- IAM exposes a focused device-authentication endpoint backed by the
+  application use case; it does not expose device lifecycle management.
 - Architecture decision records in [`docs/adrs.md`](docs/adrs.md), covering
   the service boundaries, persistence, authentication, validation, time
   handling, and startup lifecycle.
