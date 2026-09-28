@@ -7,7 +7,7 @@ boundaries, integration contracts, or operational behavior.
 These records were documented retrospectively from the implementation and
 project history. New records should be appended rather than rewriting an
 accepted decision. If a decision changes, add a new ADR that supersedes the
-earlier record and link the two records.
+earlier record and links the two records.
 
 ## ADR format
 
@@ -15,7 +15,7 @@ Each record includes:
 
 - **Status**: `Accepted`, `Superseded`, or `Deprecated`
 - **Date**: the date the decision was made or, for retrospective records, the
-  date the decision first became evident in project history
+  date the decision first became clear in project history
 - **Context**: the problem and constraints
 - **Decision**: the chosen approach
 - **Consequences**: important benefits and trade-offs
@@ -109,7 +109,7 @@ operations.
 
 ### Consequences
 
-- Device-to-service integration is simple and explicit.
+- Device-to-service integration is straightforward and explicit.
 - Authentication behavior is shared through the IAM application use case,
   while HTTP adapters remain independent of in-process integration.
 - API keys must be provisioned, rotated, stored, and transmitted securely.
@@ -198,9 +198,9 @@ before the first handled request.
 
 ### Consequences
 
-- Local startup is simple and setup is idempotent for the current process.
+- Local startup is straightforward and setup is idempotent for the current process.
 - The first request bears initialization latency.
-- Initialization is coupled to request handling and does not provide a
+- Initialization is coupled with request handling and does not provide a
   migration or readiness lifecycle for production.
 - Multi-worker startup behavior requires care because each worker has its own
   process-local guard.
@@ -298,7 +298,7 @@ Represent BPM and observation time as immutable `HeartRateBpm` and `RecordedAt`
 value objects. Create records through the `HealthRecord.record` domain factory,
 which requires the Health-local `SubmittingDevice`, validates BPM, and applies
 UTC timestamp rules. Parse timestamp strings at the HTTP boundary and pass
-typed datetimes into the application layer.
+typed datetime values into the application layer.
 
 ### Consequences
 
@@ -324,7 +324,7 @@ typed datetimes into the application layer.
 ### Context
 
 An IoT device may lose the response after the edge service commits a record.
-Retrying a non-idempotent create request can persist duplicate measurements.
+Retrying a non-idempotent creation request can persist duplicate measurements.
 
 ### Decision
 
@@ -353,7 +353,7 @@ for historical rows.
 - Globally unique event IDs, which require unnecessary coordination between
   independent devices.
 
-## ADR-0010: Make the IAM device aggregate own credential lifecycle
+## ADR-0010: Make the IAM device aggregate its own credential lifecycle
 
 - **Status**: Accepted
 - **Date**: 2026-09-27
@@ -371,14 +371,13 @@ Make `Device` responsible for authenticating credentials, rotating an active
 device's credential, and revoking access. Represent stored credentials with an
 `ApiCredential` value object that uses a salted PBKDF2 verifier and
 constant-time comparison. Repositories load devices by ID and persist aggregate
-state; authentication policy is evaluated by the aggregate. Application
+state; the aggregate evaluates authentication policy. Application
 startup adds the revocation column and migrates legacy plaintext credentials
 to verifiers.
 
 ### Consequences
 
-- Credential acceptance and active/revoked state are evaluated together by
-  the aggregate.
+- The aggregate evaluates credential acceptance and active/revoked state together.
 - Repository queries no longer include or compare raw credentials.
 - Raw API keys are not returned from persistence or represented in `Device`.
 - Startup performs a one-time data migration; application startup can take
@@ -393,5 +392,5 @@ to verifiers.
 - Hashing credentials in repository code, which would leave credential policy
   outside the aggregate.
 - Keeping lookup-by-ID-and-key, which embeds authentication policy in SQL.
-- Adding lifecycle state without persisting it, which would lose revocation on
+- Adding a lifecycle state without persisting it, which would lose revocation on
   restart.
