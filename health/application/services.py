@@ -1,8 +1,8 @@
 """Application services for the Health bounded-context.
 
-Application services sit between the interface layer and the domain layer.
-They orchestrate use-cases by coordinating domain services, domain entities,
-and repositories without containing domain logic themselves.
+Application services coordinate Health use cases: they invoke domain
+behavior, coordinate with other bounded contexts through integration
+components, and persist outcomes through repositories.
 """
 
 from datetime import datetime
@@ -15,17 +15,12 @@ from health.integration.iam_anti_corruption_layer import IamAntiCorruptionLayer
 
 
 class HealthRecordApplicationService:
-    """Application service that orchestrates the *create health record* use-case.
+    """Coordinate the use case for accepting a health telemetry event.
 
-    Responsibilities:
-
-    1. Cross-context validation – delegates IAM translation to the Health
-       :class:`~health.integration.iam_anti_corruption_layer.IamAntiCorruptionLayer`.
-    2. Domain logic – creates a valid :class:`~health.domain.entities.HealthRecord`
-       through its domain factory.
-    3. Persistence – delegates to: class:`~health.infrastructure.repositories.HealthRecordRepository` to
-       persist the entity and return the saved aggregate with its assigned
-       identity.
+    The service asks the Health-to-IAM anti-corruption layer to authenticate
+    the submitting device, creates a valid
+    :class:`~health.domain.entities.HealthRecord` through aggregate behavior,
+    and delegates idempotent persistence to the Health repository.
     """
 
     def __init__(
@@ -33,7 +28,7 @@ class HealthRecordApplicationService:
         iam_anti_corruption_layer: IamAntiCorruptionLayer,
         health_record_repository: HealthRecordRepository | None = None,
     ):
-        """Initialize the service with its required collaborators."""
+        """Initialize the service with its context integration and repository."""
         self.health_record_repository = health_record_repository or HealthRecordRepositoryImpl()
         self.iam_anti_corruption_layer = iam_anti_corruption_layer
 
@@ -45,28 +40,30 @@ class HealthRecordApplicationService:
         created_at: datetime | None,
         api_key: str,
     ) -> HealthRecordSaveResult:
-        """Execute the *create health record* use-case.
+        """Accept and persist one device-submitted telemetry event.
 
-        Validates that the device identified by ``device_id`` is registered
-        and that the supplied ``api_key`` matches the stored credential before
-        creating and idempotently persisting the domain record.
+        Authentication is delegated to the IAM anti-corruption layer. Health
+        then creates the record through its aggregate and persists it
+        idempotently, distinguishing a new event from an identical retry.
 
         Args:
-            device_id (str): Identifier of the device submitting the reading.
-            bpm (float): Heart-rate measurement in beats per minute.
-            created_at (datetime | None): Parsed timestamp of the reading. The
-                domain record normalizes it to UTC and accepts ``None``
-                to default to the current UTC time.
-            api_key (str): The value of the ``X-API-Key`` request header used
-                to authenticate the device.
+            device_id: Identity of the device submitting the reading.
+            event_id: Stable device-generated identity reused for retries.
+            bpm: Heart-rate measurement in beats per minute.
+            created_at: Parsed observation time, or ``None`` to use the
+                current UTC time.
+            api_key: Credential presented for device authentication.
 
         Returns:
-            HealthRecordSaveResult: The persisted record and whether it was
-            newly created or was an identical retry.
+            The persisted record and whether it was newly created or an
+            identical retry.
 
         Raises:
-            DeviceAuthenticationFailed: If the credentials are not accepted.
-            ValueError: If the domain rejects the sensor values.
+            DeviceAuthenticationFailed: The IAM context rejects the device's
+                credentials.
+            ValueError: The Health domain rejects a value or invariant.
+            :class:`~health.domain.errors.TelemetryEventConflict`: The device
+                reused an event ID for different telemetry.
         """
         submitting_device = self.iam_anti_corruption_layer.authenticated_submitting_device(
             device_id, api_key

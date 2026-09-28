@@ -1,10 +1,9 @@
 """Interface (REST API) layer for the IAM bounded context.
 
-Exposes a Flask Blueprint (``iam_api``) and a shared authentication helper
-(``authenticate_request``) used by other bounded contexts to guard their own
-endpoints.  This layer owns no domain or business logic; it is concerned
-solely with HTTP request/response handling and delegating to the application
-service.
+Exposes IAM HTTP routes and adapts request data for the IAM application
+service. ``authenticate_request`` is an HTTP helper for route handlers; other
+bounded contexts use IAM's application use case through their own integration
+components instead of depending on this interface.
 """
 from flask import Blueprint, jsonify, request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -17,7 +16,7 @@ iam_api = Blueprint("iam_api", __name__)
 class AuthRequest(BaseModel):
     """Pydantic model for validating the authentication request data."""
 
-    # The shared health payload contains fields IAM does not own.
+    # Ignore additional payload fields outside IAM's authentication contract.
     model_config = ConfigDict(extra="ignore")
 
     device_id: str | None = Field(None, description="Identifier of the device.")
@@ -28,18 +27,13 @@ auth_service = AuthApplicationService()
 
 
 def authenticate_request() -> tuple | None:
-    """Validate the device identity for an incoming HTTP request.
+    """Authenticate the device described by the current HTTP request.
 
     Extracts ``device_id`` from the JSON request body and ``X-API-Key`` from
-    the request headers, then delegates to the IAM application service to
-    verify the credentials against the device registry.
-
-    This helper is intended to be called at the start of any route handler
-    in a bounded context that requires device authentication::
-
-        auth_result = authenticate_request()
-        if auth_result:
-            return auth_result  # short-circuit with 401
+    the request headers, validates the HTTP payload, then delegates
+    authentication to IAM's application service. This helper belongs to the
+    HTTP interface and is not the contract for communication between
+    bounded contexts.
 
     **Expected request contract:**
 
@@ -47,10 +41,8 @@ def authenticate_request() -> tuple | None:
     - ``X-API-Key`` header carrying the device's secret API key.
 
     Returns:
-        tuple[flask.Response, int] | None: A ``(JSON response, 401)`` tuple
-        when authentication fails (missing credentials or invalid pair);
-        ``None`` when the request is successfully authenticated, allowing the
-        caller to proceed with its own logic.
+        An HTTP error response and status code when the request is malformed
+        or authentication fails; ``None`` when authentication succeeds.
     """
     api_key = request.headers.get("X-API-Key")
     if not api_key:

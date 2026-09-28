@@ -1,13 +1,14 @@
 """Domain entities for the Health bounded context.
 
-This module defines the core aggregate of the Health bounded context.
-Entities carry identity and encapsulate domain state; they should only be
-created or mutated through domain services that enforce business invariants.
+The ``HealthRecord`` aggregate and its value objects enforce the invariants for
+an accepted telemetry observation. ``SubmittingDevice`` is Health's local
+representation of an authenticated submitting device.
 """
 from dataclasses import dataclass
 from datetime import datetime
 
 from health.domain.value_objects import HeartRateBpm, RecordedAt, TelemetryEventId
+
 
 @dataclass(frozen=True)
 class SubmittingDevice:
@@ -28,12 +29,13 @@ class HealthRecord:
     smart band device at a given point in time.
 
     Attributes:
-        submitting_device (SubmittingDevice): Health's local device concept.
-        heart_rate (HeartRateBpm): Validated heart-rate measurement.
-        recorded_at (RecordedAt): Time of the observation, normalized to UTC.
-        id (int | None): Surrogate identity assigned by the persistence layer
-            after the record is saved.  ``None`` for transient (unsaved)
-            instances.
+        submitting_device: Health's local concept for the device submitting
+            this observation.
+        event_id: Device-generated identity used to recognize retries.
+        heart_rate: Validated heart-rate measurement.
+        recorded_at: Observation time, normalized to UTC.
+        timestamp_supplied: Whether the device supplied the observation time.
+        id: Persistence identity, or ``None`` before the record is saved.
     """
 
     submitting_device: SubmittingDevice

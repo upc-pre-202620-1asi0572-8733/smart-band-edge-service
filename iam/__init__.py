@@ -9,6 +9,5 @@ smart band devices, following a Domain-Driven Design layered architecture:
   lifecycle and authentication use-cases.
 - **infrastructure**: Peewee ORM models and repository implementations for
   persisting device data.
-- **interfaces**: Flask Blueprint exposing authentication helpers used by
-  other bounded contexts.
+- **interfaces**: Flask Blueprint and HTTP request handling for IAM routes.
 """

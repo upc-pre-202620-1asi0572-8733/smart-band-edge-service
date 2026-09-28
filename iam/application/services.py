@@ -1,8 +1,8 @@
 """Application services for the IAM bounded context.
 
-Application services orchestrate use-cases by coordinating domain objects and
-repositories.  They contain no domain logic themselves; all business rules live
-in the domain layer.
+Application services coordinate IAM use cases by loading and persisting
+aggregates and invoking their domain behavior. Domain invariants remain
+encapsulated by those aggregates and value objects.
 """
 from iam.domain.entities import Device
 from iam.domain.repositories import DeviceRepository
@@ -20,39 +20,52 @@ class AuthApplicationService:
         self.device_repository = device_repository or DeviceRepositoryImpl()
 
     def authenticate(self, device_id: str, api_key: str) -> bool:
-        """Authenticate a device by its ID and API key.
+        """Check credentials against the identified device's access state.
 
-        Loads the aggregate by identity and asks it to verify the presented
-        credential and current access state.
+        A credential is accepted only when the device exists, is not revoked,
+        and its stored verifier matches the presented API key.
 
         Args:
-            device_id (str): Unique identifier of the device (e.g.
-                ``'smart-band-001'``).
-            api_key (str): The secret API key paired with the device,
-                typically provided in the ``X-API-Key`` request header.
+            device_id: Unique identity of the device.
+            api_key: Secret credential presented for authentication.
 
         Returns:
-            bool: ``True`` if a device with the given ``device_id`` and
-            ``api_key`` exists in the repository; ``False`` otherwise.
+            ``True`` if the device exists, is active, and accepts the
+            credential; otherwise ``False``.
         """
         device = self.device_repository.find_by_device_id(device_id)
         return device is not None and device.authenticate(api_key)
 
     def register_device(self, device_id: str, api_key: str) -> Device:
-        """Register a new device, protecting its credential in the aggregate."""
+        """Register a device and persist its aggregate with a protected credential.
+
+        Raises:
+            ValueError: A device with this identity is already registered, or
+                the domain rejects the identity or credential.
+        """
         if self.device_repository.find_by_device_id(device_id) is not None:
             raise ValueError("Device is already registered")
         return self.device_repository.save(Device.register(device_id, api_key))
 
     def revoke_device(self, device_id: str) -> Device:
-        """Revoke an active device and persist its new aggregate state."""
+        """Revoke and persist an active device.
+
+        Raises:
+            ValueError: The device does not exist or its aggregate cannot be
+                revoked again.
+        """
         device = self.device_repository.find_by_device_id(device_id)
         if device is None:
             raise ValueError("Device not found")
         return self.device_repository.save(device.revoke())
 
     def rotate_api_key(self, device_id: str, new_api_key: str) -> Device:
-        """Rotate an active device credential and persist its new verifier."""
+        """Replace and persist an active device's API-key verifier.
+
+        Raises:
+            ValueError: The device does not exist, is revoked, or the new
+                credential is invalid.
+        """
         device = self.device_repository.find_by_device_id(device_id)
         if device is None:
             raise ValueError("Device not found")
@@ -61,10 +74,10 @@ class AuthApplicationService:
     def get_or_create_test_device(self, device_id: str, api_key: str) -> Device:
         """Retrieve the default test device, creating it if it does not exist.
 
-        Intended for development and local testing only.
+        Intended only for development and local testing. The repository
+        persists a newly registered aggregate when no matching device exists.
 
         Returns:
-            Device: The :class:`~iam.domain.entities.Device` entity for the
-            pre-configured test device (``device_id='smart-band-001'``).
+            The matching :class:`~iam.domain.entities.Device` aggregate.
         """
         return self.device_repository.get_or_create_test_device(device_id, api_key)

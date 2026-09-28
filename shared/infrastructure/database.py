@@ -1,17 +1,16 @@
 """Shared database infrastructure for the Smart Band Edge Service.
 
-Provides a single: class:`peewee.SqliteDatabase` instance (``db``) that is
-imported by ORM models across all bounded contexts, ensuring every model
-operates on the same physical database file.
+Provides a single :class:`peewee.SqliteDatabase` instance (``db``) shared by
+the bounded contexts' ORM mappings, so they use the same database.
 
-The: func:`init_db` helper is called once at application start-up to open a
-connection and create any missing tables without affecting existing data
-(``safe=True``).
+The :func:`init_db` function is called during application startup to open the
+configured database and create any missing tables with Peewee's
+``safe=True`` option.
 
 Note:
-    The ``db`` object itself is not connected until: func:`init_db` is
-    called.  Peewee's ``SqliteDatabase`` manages the connection lifecycle
-    via its own thread-local storage.
+    The ``db`` object is configured before :func:`init_db` connects it.
+    Peewee manages connections using thread-local storage; the Flask
+    application closes the active connection during teardown.
 """
 from pathlib import Path
 
@@ -31,23 +30,19 @@ def configure_database(database_path: str) -> None:
 def init_db() -> None:
     """Open the database connection and create all required tables.
 
-    Imports the ORM models from the IAM and Health bounded contexts at call
-    time (deferred import) to avoid circular dependencies during module
-    loading, then issues a ``CREATE TABLE IF NOT EXISTS`` for each model.
+    Imports the ORM models at call time to avoid import cycles, then creates
+    their tables if absent.
 
-    This function is idempotent: calling it when the tables already exist is
-    safe and has no side effects (``safe=True`` suppresses ``CREATE TABLE``
-    errors for pre-existing tables).
+    Calling this function repeatedly is safe when tables already exist.
 
     Side effects:
-        - Opens the configured SQLite database (creating the file if it does
-          not exist).
-        - Creates the ``devices`` table if absent.
-        - Creates the ``health_records`` table if absent.
-        - Keeps the application-scoped connection open until Flask teardown.
+        Opens the configured SQLite connection, creates its database file
+        when needed, and creates the ``devices`` and ``health_records``
+        tables when absent. The connection remains open until Flask teardown.
     """
     if db.is_closed():
         db.connect()
     from iam.infrastructure.models import Device
     from health.infrastructure.models import HealthRecord
+
     db.create_tables([Device, HealthRecord], safe=True)
