@@ -114,7 +114,8 @@ unattended device-to-edge interactions.
 
 - **Health bounded context**: `TS-SBE-001`, `TS-SBE-003`, `TS-SBE-004`,
   `TS-SBE-005`
-- **IAM bounded context**: `TS-SBE-002`
+- **IAM bounded context**: `TS-SBE-001`, `TS-SBE-002`, `TS-SBE-005`,
+  `TS-SBE-006` (optional development-device seeding)
 - **Application bootstrap / shared infrastructure**: `TS-SBE-006`
 
 Use these stories to drive API evolution, regression validation, and backlog
@@ -125,6 +126,8 @@ prioritization as the IoT edge capabilities grow.
 - Python 3.13+
 - Flask
 - Peewee
+- Pydantic
+- python-dotenv
 - SQLite
 
 Exact Python dependencies are declared in [`requirements.txt`](requirements.txt).
@@ -144,7 +147,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Run the service
+### 3. Configure a local test device
+
+Test-device seeding is disabled by default. Enable it and provide a unique
+local-only API key before starting the service:
+
+```sh
+export SEED_TEST_DEVICE=true
+export TEST_DEVICE_API_KEY='replace-with-a-unique-local-key'
+```
+
+### 4. Run the service
 
 ```sh
 APP_ENV=development python app.py
@@ -265,13 +278,15 @@ Creates a new heart-rate record for an authenticated device.
 ```sh
 curl -X POST http://127.0.0.1:5000/api/v1/health-monitoring/data-records \
   -H 'Content-Type: application/json' \
-  -H 'X-API-Key: test-api-key-123' \
-  -d '{
-	"device_id": "smart-band-001",
-	"event_id": "band-001-000042",
-	"bpm": 72.5,
-	"created_at": "2025-06-04T18:23:00-05:00"
-  }'
+  -H "X-API-Key: ${TEST_DEVICE_API_KEY}" \
+  --data-binary @- <<'JSON'
+{
+  "device_id": "smart-band-001",
+  "event_id": "band-001-000042",
+  "bpm": 72.5,
+  "created_at": "2025-06-04T18:23:00-05:00"
+}
+JSON
 ```
 
 #### Success response
@@ -288,20 +303,22 @@ with different telemetry returns `409 Conflict`.
   "device_id": "smart-band-001",
   "event_id": "band-001-000042",
   "bpm": 72.5,
-  "created_at": "2025-06-04T23:23:00+00:00Z"
+  "created_at": "2025-06-04T23:23:00Z"
 }
 ```
 
 #### Error responses
 
 - `400 Bad Request`
-  - missing required fields
-  - invalid BPM value
-  - malformed timestamp
+  - invalid JSON, missing required fields, unexpected fields, or invalid field
+    values
+  - BPM outside `0..200`, a malformed timestamp, or a naive timestamp
 - `401 Unauthorized`
-  - missing `device_id`
+  - missing or empty `device_id`
   - missing `X-API-Key`
   - invalid device/API key pair
+- `415 Unsupported Media Type`
+  - request is not JSON
 - `409 Conflict`
   - event ID already used for different telemetry
 
@@ -309,10 +326,10 @@ with different telemetry returns `409 Conflict`.
 
 When adapting this service for a real IoT solution, consider the following:
 
-- **Credential management**: replace hard-coded development credentials with a
-  secure enrollment or provisioning flow. IAM stores a salted verifier rather
-  than the API key, and its device aggregate supports credential rotation and
-  revocation through application services.
+- **Credential management**: use a secure enrollment or provisioning flow for
+  real devices. IAM stores a salted verifier rather than the API key, and its
+  device aggregate supports credential rotation and revocation through
+  application services.
 - **Persistence**: SQLite is suitable for local development and lightweight
   edge deployments, but not ideal for high-write concurrency.
 - **Observability**: add structured logging, trace correlation, and a proper
@@ -323,8 +340,10 @@ When adapting this service for a real IoT solution, consider the following:
 - **Delivery reliability**: persist a stable event ID on the device before
   transmission and reuse it for every retry until the edge service confirms
   acceptance.
-- **Startup lifecycle**: move bootstrap logic out of `before_request` if you
-  need deterministic initialization during container startup.
+- **Schema migrations**: this service applies additive compatibility
+  migrations during application creation. For production deployments, use a
+  versioned migration workflow and back up the SQLite database before schema
+  changes.
 
 ## Documentation
 
@@ -351,18 +370,3 @@ Environment configuration defaults:
 
 This project is licensed under the MIT License. See [`LICENSE.md`](LICENSE.md)
 for details.
-
-## Improvements Made
-
-The codebase has been modernized with the following improvements:
-
-1.  **Modern Python Features**:
-    *   **Immutability**: Domain entities (`Device`, `HealthRecord`) now use `@dataclass(frozen=True)` to ensure state consistency and prevent accidental modification outside domain services.
-    *   **Type Hinting**: Consistent use of modern type hints (e.g., `str | None` instead of `Optional[str]`) and `datetime.UTC`.
-2.  **Clean Architecture & DDD**:
-    *   **Repository Protocols**: Introduced `Protocol` based interfaces for repositories in the domain layer. This decouples the domain from infrastructure (Peewee) and enables easier testing via dependency injection.
-    *   **Dependency Injection**: Application services now accept repository interfaces in their constructors, allowing for easier mocking and better testability.
-3.  **Robust Data Validation**:
-    *   **Pydantic Integration**: Introduced Pydantic for request validation in the interface layer. This provides automatic type checking, range validation (e.g., BPM between 0 and 200), and clearer error messages.
-4.  **Dependencies**: Updated `requirements.txt` to include `pydantic` and ensure latest compatible versions of other libraries.
-5.  **Refactoring**: Converted repository methods from `@staticmethod` to instance methods to align with modern OOP practices and DI patterns.

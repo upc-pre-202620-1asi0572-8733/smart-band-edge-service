@@ -100,7 +100,7 @@ def create_health_record():
             "device_id": record.device_id,
             "event_id": record.event_id.value,
             "bpm": record.bpm,
-            "created_at": record.created_at.isoformat() + "Z"
+            "created_at": record.created_at.isoformat().replace("+00:00", "Z")
         }), 201 if result.created else 200
     except ValidationError:
         return jsonify({"error": "Invalid health record request"}), 400

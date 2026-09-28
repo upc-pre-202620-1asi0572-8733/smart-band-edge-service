@@ -144,7 +144,7 @@ class HealthApiTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json["event_id"], "event-create-1")
-        self.assertEqual(response.json["created_at"], "2026-09-27T20:00:00+00:00Z")
+        self.assertEqual(response.json["created_at"], "2026-09-27T20:00:00Z")
 
     def test_rejects_naive_timestamp(self):
         response = self.client.post(
